@@ -409,6 +409,7 @@ non_empty_statement:
 statement:
       non_empty_statement
     | ';'                                                   { makeNop($$); }
+    | jsx_element                                           { $$ = $1; }
 ;
 
 blocklike_statement:
@@ -1011,6 +1012,7 @@ expr:
           }
     | new_expr
     | match
+    | jsx_element                                          { $$ = $1; }
     | T_CLONE expr                                          { $$ = Expr\Clone_[$2]; }
     | variable T_PLUS_EQUAL expr                            { $$ = Expr\AssignOp\Plus      [$1, $3]; }
     | variable T_MINUS_EQUAL expr                           { $$ = Expr\AssignOp\Minus     [$1, $3]; }
@@ -1428,4 +1430,68 @@ encaps_var_offset:
     | plain_variable
 ;
 
-%%
+jsx_element:
+      '<' T_STRING jsx_attributes '>' jsx_children '<' '/' T_STRING '>'
+          { $$ = Node\JSX\Element[$2, $3, $5, $8]; }  
+    | '<' T_STRING jsx_attributes '/' '>'
+          { $$ = Node\JSX\Element[$2, $3, [], null]; }
+    | '<' T_STRING '>' jsx_children '<' '/' T_STRING '>'
+          { $$ = Node\JSX\Element[$2, [], $4, $7]; }
+    | T_IS_NOT_EQUAL jsx_children '<' '/' '>'
+          { $$ = Node\JSX\Element['', [], $2, '']; }
+    | '<' '/' '>'
+          { $$ = Node\JSX\Element['', [], [], '']; }
+    | T_IS_NOT_EQUAL  jsx_children '<' '/' '>' %prec T_IS_NOT_EQUAL
+          { $$ = Node\JSX\Element['', [], $2, '']; }
+    | '<' '/' '>' %prec T_IS_NOT_EQUAL
+          { $$ = Node\JSX\Element['', [], [], '']; }
+;
+
+jsx_attributes:
+      /* empty */                                           { $$ = []; }
+    | jsx_attributes jsx_attribute                          { push($1, $2); }
+;
+
+jsx_attribute:
+      T_STRING '=' jsx_attribute_value                      { $$ = Node\JSX\Attribute[$1, $3]; }
+    | T_STRING                                              { $$ = Node\JSX\Attribute[$1, Expr\ConstFetch[Name['true']]]; }
+    | '{' T_ELLIPSIS expr '}'                               { $$ = Node\JSX\SpreadAttribute[$3]; }
+;
+
+jsx_attribute_value:
+      T_CONSTANT_ENCAPSED_STRING                           { $$ = Scalar\String_[$1]; }
+    | '{' jsx_expr '}'                                     { $$ = $2; }
+    | T_STRING                                             { $$ = Scalar\String_[$1]; }
+;
+
+jsx_children:
+      /* empty */                                           { $$ = []; }
+    | jsx_children jsx_child                                { push($1, $2); }
+    | jsx_children '{' jsx_expr '}'                        { push($1, Node\JSX\ExpressionContainer[$3]); }
+    | jsx_children T_STRING              { 
+        // Handle text after closing tags
+        if (count($1) > 0 && $1[count($1)-1] instanceof Node\JSX\Text) {
+            // Merge with previous text node
+            $last = array_pop($1);
+            $text = $last->value . $2;
+            push($1, Node\JSX\Text[$text]);
+        } else {
+            push($1, Node\JSX\Text[$2]);
+        }
+      }
+;
+
+jsx_child:
+      T_CONSTANT_ENCAPSED_STRING                           { $$ = Node\JSX\Text[$1]; }
+    | jsx_element                                          { $$ = $1; }
+    | '{' jsx_expr '}'                                     { $$ = Node\JSX\ExpressionContainer[$2]; }
+    | '{' '/' '*' T_CONSTANT_ENCAPSED_STRING '*' '/' '}'   { $$ = Node\JSX\Comment[$4]; }
+;
+
+jsx_expr:
+      expr                                                  { $$ = $1; }
+    | jsx_element                                          { $$ = $1; }
+    | expr '?' jsx_expr ':' jsx_expr                       { $$ = Expr\Ternary[$1, $3, $5]; }
+    | expr '?' ':' jsx_expr                                { $$ = Expr\Ternary[$1, null, $4]; }
+    | '/' '*' T_CONSTANT_ENCAPSED_STRING '*' '/'           { $$ = Node\JSX\Comment[$3]; }
+;
