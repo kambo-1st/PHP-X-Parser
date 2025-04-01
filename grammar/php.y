@@ -124,6 +124,13 @@
 %token T_NAME_RELATIVE
 %token T_ATTRIBUTE
 %token T_ENUM
+%token T_JSX_OPEN '<'
+%token T_JSX_CLOSE '>'
+%token T_JSX_SELF_CLOSE '/>'
+%token T_JSX_ATTRIBUTE_NAME
+%token T_JSX_ATTRIBUTE_VALUE
+%token T_JSX_EXPRESSION_START '{'
+%token T_JSX_EXPRESSION_END '}'
 
 %%
 
@@ -409,6 +416,7 @@ non_empty_statement:
 statement:
       non_empty_statement
     | ';'                                                   { makeNop($$); }
+    | jsx_element
 ;
 
 blocklike_statement:
@@ -1427,5 +1435,51 @@ encaps_var_offset:
     | '-' T_NUM_STRING                                      { $$ = $this->parseNumString('-' . $2, attributes()); }
     | plain_variable
 ;
+
+jsx_element:
+    T_JSX_OPEN jsx_element_name jsx_attributes_opt T_JSX_CLOSE jsx_children_opt T_JSX_OPEN '/' jsx_element_name T_JSX_CLOSE
+    | T_JSX_OPEN jsx_element_name jsx_attributes_opt T_JSX_SELF_CLOSE
+    ;
+
+jsx_element_name:
+    T_STRING
+    | T_NAMESPACE_NAME
+    ;
+
+jsx_attributes_opt:
+    /* empty */
+    | jsx_attributes
+    ;
+
+jsx_attributes:
+    jsx_attribute
+    | jsx_attributes jsx_attribute
+    ;
+
+jsx_attribute:
+    T_JSX_ATTRIBUTE_NAME '=' jsx_attribute_value
+    | T_JSX_ATTRIBUTE_NAME
+    ;
+
+jsx_attribute_value:
+    T_CONSTANT_ENCAPSED_STRING
+    | T_JSX_EXPRESSION_START expr T_JSX_EXPRESSION_END
+    ;
+
+jsx_children_opt:
+    /* empty */
+    | jsx_children
+    ;
+
+jsx_children:
+    jsx_child
+    | jsx_children jsx_child
+    ;
+
+jsx_child:
+    T_JSX_TEXT
+    | T_JSX_EXPRESSION_START expr T_JSX_EXPRESSION_END
+    | jsx_element
+    ;
 
 %%
