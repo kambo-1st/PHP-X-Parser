@@ -21,6 +21,7 @@
 %left T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG
 %nonassoc T_IS_EQUAL T_IS_NOT_EQUAL T_IS_IDENTICAL T_IS_NOT_IDENTICAL T_SPACESHIP
 %nonassoc '<' T_IS_SMALLER_OR_EQUAL '>' T_IS_GREATER_OR_EQUAL
+%nonassoc T_JSX_OPEN T_JSX_CLOSE
 #if PHP7
 %left T_SL T_SR
 %left '+' '-' '.'
@@ -127,10 +128,13 @@
 %token T_JSX_OPEN '<'
 %token T_JSX_CLOSE '>'
 %token T_JSX_SELF_CLOSE '/>'
-%token T_JSX_ATTRIBUTE_NAME
-%token T_JSX_ATTRIBUTE_VALUE
+%token T_JSX_ATTRIBUTE_NAME '[a-zA-Z_][a-zA-Z0-9_]*'
 %token T_JSX_EXPRESSION_START '{'
 %token T_JSX_EXPRESSION_END '}'
+%token T_JSX_TEXT '[^<{]+'
+
+const LEXER_STATE_JSX = 'JSX';
+const LEXER_STATE_JSX_EXPRESSION = 'JSX_EXPRESSION';
 
 %%
 
@@ -1438,12 +1442,13 @@ encaps_var_offset:
 
 jsx_element:
     T_JSX_OPEN jsx_element_name jsx_attributes_opt T_JSX_CLOSE jsx_children_opt T_JSX_OPEN '/' jsx_element_name T_JSX_CLOSE
+        { $$ = Node\JSXElement[$2, $3, $5]; }
     | T_JSX_OPEN jsx_element_name jsx_attributes_opt T_JSX_SELF_CLOSE
-    ;
-
-jsx_element_name:
-    T_STRING
-    | T_NAMESPACE_NAME
+        { $$ = Node\JSXElement[$2, $3, []]; }
+    | error T_JSX_CLOSE
+        { $$ = null; $this->state = LEXER_STATE_NORMAL; }
+    | T_JSX_OPEN error
+        { $$ = null; $this->state = LEXER_STATE_NORMAL; }
     ;
 
 jsx_attributes_opt:
@@ -1453,17 +1458,23 @@ jsx_attributes_opt:
 
 jsx_attributes:
     jsx_attribute
+        { init($1); }
     | jsx_attributes jsx_attribute
+        { push($1, $2); }
     ;
 
 jsx_attribute:
     T_JSX_ATTRIBUTE_NAME '=' jsx_attribute_value
+        { $$ = Node\JSXAttribute[$1, $3]; }
     | T_JSX_ATTRIBUTE_NAME
+        { $$ = Node\JSXAttribute[$1, Scalar\String_::fromString('true', attributes())]; }
     ;
 
 jsx_attribute_value:
     T_CONSTANT_ENCAPSED_STRING
+        { $$ = Scalar\String_::fromString($1, attributes()); }
     | T_JSX_EXPRESSION_START expr T_JSX_EXPRESSION_END
+        { $$ = $2; }
     ;
 
 jsx_children_opt:
@@ -1473,13 +1484,128 @@ jsx_children_opt:
 
 jsx_children:
     jsx_child
+        { init($1); }
     | jsx_children jsx_child
+        { push($1, $2); }
     ;
 
 jsx_child:
-    T_JSX_TEXT
+    jsx_text
+        { $$ = $1; }
     | T_JSX_EXPRESSION_START expr T_JSX_EXPRESSION_END
+        { $$ = Node\JSXExpression[$2]; }
     | jsx_element
+        { $$ = $1; }
+    ;
+
+jsx_text:
+    T_JSX_TEXT
+        { $$ = Node\JSXText[$1]; }
+    | T_JSX_TEXT T_JSX_TEXT
+        { $$ = Node\JSXText[$1 . $2]; }
+    ;
+
+jsx_element_name:
+    T_STRING
+    | T_NAMESPACE_NAME
     ;
 
 %%
+
+// Lexer rules
+'<' {
+    if ($this->state === LEXER_STATE_NORMAL) {
+        $this->state = LEXER_STATE_JSX;
+        return T_JSX_OPEN;
+    }
+}
+
+'>' {
+    if ($this->state === LEXER_STATE_JSX) {
+        $this->state = LEXER_STATE_NORMAL;
+        return T_JSX_CLOSE;
+    }
+}
+
+'/>' {
+    if ($this->state === LEXER_STATE_JSX) {
+        $this->state = LEXER_STATE_NORMAL;
+        return T_JSX_SELF_CLOSE;
+    }
+}
+
+'[a-zA-Z_][a-zA-Z0-9_]*' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return T_JSX_ATTRIBUTE_NAME;
+    }
+}
+
+'{' {
+    if ($this->state === LEXER_STATE_JSX) {
+        $this->state = LEXER_STATE_JSX_EXPRESSION;
+        return T_JSX_EXPRESSION_START;
+    }
+}
+
+'}' {
+    if ($this->state === LEXER_STATE_JSX_EXPRESSION) {
+        $this->state = LEXER_STATE_JSX;
+        return T_JSX_EXPRESSION_END;
+    }
+}
+
+'[^<{]+' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return T_JSX_TEXT;
+    }
+}
+
+// Whitespace handling
+'[ \t\n\r]+' {
+    if ($this->state === LEXER_STATE_JSX) {
+        $text = $this->normalizeJSXText($1);
+        return T_JSX_TEXT;
+    }
+}
+
+// Text normalization
+function normalizeJSXText($text) {
+    // Remove extra whitespace
+    $text = preg_replace('/\s+/', ' ', $text);
+    // Handle HTML entities
+    $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    return $text;
+}
+
+function normalizeJSXAttribute($name) {
+    // Convert camelCase to kebab-case for HTML attributes
+    return strtolower(preg_replace('/([a-z])([A-Z])/', '$1-$2', $name));
+}
+
+// Error recovery
+error {
+    if ($this->state === LEXER_STATE_JSX) {
+        $this->state = LEXER_STATE_NORMAL;
+        return $this->handleJSXError('Unexpected character in JSX');
+    }
+}
+
+// State transitions
+function enterJSX() {
+    $this->state = LEXER_STATE_JSX;
+}
+
+function enterJSXExpression() {
+    $this->state = LEXER_STATE_JSX_EXPRESSION;
+    $this->lexerMode = LEXER_MODE_PHP;
+    return true;
+}
+
+function exitJSX() {
+    $this->state = LEXER_STATE_NORMAL;
+}
+
+function handleJSXError($message) {
+    $this->error = new Error($message, $this->getAttributes());
+    return false;
+}
