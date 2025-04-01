@@ -359,6 +359,7 @@ abstract class ParserAbstract implements Parser {
                     switch ($this->errorState) {
                         case 0:
                             $msg = $this->getErrorMessage($symbol, $state);
+                            //var_dump($this->getAttributesForToken($this->tokenPos));
                             $this->emitError(new Error($msg, $this->getAttributesForToken($this->tokenPos)));
                             // Break missing intentionally
                             // no break
