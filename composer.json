@@ -39,5 +39,6 @@
     },
     "bin": [
         "bin/php-parse"
-    ]
+    ],
+    "version": "4.19.4"
 }
