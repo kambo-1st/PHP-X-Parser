@@ -1446,9 +1446,13 @@ jsx_element:
     | T_JSX_OPEN jsx_element_name jsx_attributes_opt T_JSX_SELF_CLOSE
         { $$ = Node\JSXElement[$2, $3, []]; }
     | error T_JSX_CLOSE
-        { $$ = null; $this->state = LEXER_STATE_NORMAL; }
+        { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Unexpected characters before closing tag'); }
     | T_JSX_OPEN error
-        { $$ = null; $this->state = LEXER_STATE_NORMAL; }
+        { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Unexpected characters after opening tag'); }
+    | T_JSX_OPEN jsx_element_name error
+        { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Invalid attribute or closing tag'); }
+    | T_JSX_OPEN jsx_element_name jsx_attributes_opt error
+        { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Expected closing tag or self-closing tag'); }
     ;
 
 jsx_attributes_opt:
@@ -1461,6 +1465,8 @@ jsx_attributes:
         { init($1); }
     | jsx_attributes jsx_attribute
         { push($1, $2); }
+    | error
+        { $$ = null; $this->handleJSXError('Invalid attribute syntax'); }
     ;
 
 jsx_attribute:
@@ -1468,6 +1474,10 @@ jsx_attribute:
         { $$ = Node\JSXAttribute[$1, $3]; }
     | T_JSX_ATTRIBUTE_NAME
         { $$ = Node\JSXAttribute[$1, Scalar\String_::fromString('true', attributes())]; }
+    | T_JSX_ATTRIBUTE_NAME '=' T_JSX_EXPRESSION_START expr T_JSX_EXPRESSION_END
+        { $$ = Node\JSXAttribute[$1, $4]; }
+    | error
+        { $$ = null; $this->handleJSXError('Invalid attribute syntax'); }
     ;
 
 jsx_attribute_value:
@@ -1475,6 +1485,12 @@ jsx_attribute_value:
         { $$ = Scalar\String_::fromString($1, attributes()); }
     | T_JSX_EXPRESSION_START expr T_JSX_EXPRESSION_END
         { $$ = $2; }
+    | T_LNUMBER
+        { $$ = Scalar\LNumber[$1, attributes()]; }
+    | T_DNUMBER
+        { $$ = Scalar\DNumber[$1, attributes()]; }
+    | T_STRING
+        { $$ = Scalar\String_[$1, attributes()]; }
     ;
 
 jsx_children_opt:
@@ -1507,7 +1523,11 @@ jsx_text:
 
 jsx_element_name:
     T_STRING
+        { $$ = Node\Identifier[$1]; }
     | T_NAMESPACE_NAME
+        { $$ = Node\Name[$1]; }
+    | T_NS_SEPARATOR T_STRING
+        { $$ = Node\Name[$2]; }
     ;
 
 %%
@@ -1564,22 +1584,50 @@ jsx_element_name:
 '[ \t\n\r]+' {
     if ($this->state === LEXER_STATE_JSX) {
         $text = $this->normalizeJSXText($1);
+        if ($this->preserveWhitespace) {
+            return T_JSX_TEXT;
+        }
         return T_JSX_TEXT;
     }
 }
 
 // Text normalization
 function normalizeJSXText($text) {
-    // Remove extra whitespace
-    $text = preg_replace('/\s+/', ' ', $text);
+    // Handle indentation
+    if ($this->preserveWhitespace) {
+        $lines = explode("\n", $text);
+        $indent = str_repeat(" ", $this->indentLevel * 4);
+        $text = implode("\n" . $indent, $lines);
+    } else {
+        // Remove extra whitespace
+        $text = preg_replace('/\s+/', ' ', $text);
+    }
+    
     // Handle HTML entities
     $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    
+    // Handle Unicode characters
+    $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
+    
+    // Handle special characters in attributes
+    $text = preg_replace('/[\x00-\x1F\x7F]/u', '', $text);
+    
     return $text;
 }
 
 function normalizeJSXAttribute($name) {
     // Convert camelCase to kebab-case for HTML attributes
-    return strtolower(preg_replace('/([a-z])([A-Z])/', '$1-$2', $name));
+    $name = strtolower(preg_replace('/([a-z])([A-Z])/', '$1-$2', $name));
+    
+    // Handle special attributes
+    switch ($name) {
+        case 'class':
+            return 'className';
+        case 'for':
+            return 'htmlFor';
+        default:
+            return $name;
+    }
 }
 
 // Error recovery
@@ -1598,6 +1646,7 @@ function enterJSX() {
 function enterJSXExpression() {
     $this->state = LEXER_STATE_JSX_EXPRESSION;
     $this->lexerMode = LEXER_MODE_PHP;
+    $this->expressionDepth++;
     return true;
 }
 
@@ -1607,5 +1656,15 @@ function exitJSX() {
 
 function handleJSXError($message) {
     $this->error = new Error($message, $this->getAttributes());
+    $this->state = LEXER_STATE_NORMAL;
+    return false;
+}
+
+function handleJSXExpressionError() {
+    if ($this->expressionDepth > 0) {
+        $this->handleJSXError('Unclosed PHP expression in JSX');
+    }
+    $this->expressionDepth = 0;
+    $this->state = LEXER_STATE_NORMAL;
     return false;
 }
