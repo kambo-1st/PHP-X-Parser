@@ -34,6 +34,18 @@ class JSX extends Lexer {
     /** @var bool */
     private $inPhpTag = false;
 
+    /** @var string */
+    private $textBuffer = '';
+
+    /** @var string */
+    private $code = '';
+
+    /** @var int */
+    private $position = 0;
+
+    /** @var int */
+    private $line = 1;
+
     /**
      * Creates a Lexer.
      *
@@ -56,222 +68,290 @@ class JSX extends Lexer {
      */
     public function tokenize(string $code, ?ErrorHandler $errorHandler = null): array
     {
-        if ($errorHandler === null) {
-            $errorHandler = new ErrorHandler\Throwing();
-        }
-        
+        $this->code = $code;
+        $this->position = 0;
         $this->tokens = [];
-        $pos = 0;
-        $len = strlen($code);
-        $mode = self::MODE_PHP;
-        $depth = 0;
-        $buffer = '';
-        $inJSXText = false;
-        $inPhpTag = false;
-        $line = 1;
+        $this->mode = self::MODE_PHP;
+        $this->jsxDepth = 0;
+        $this->inJSXText = false;
+        $this->textBuffer = '';
+        $this->line = 1;
 
-        error_log("Starting tokenization of code: " . $code);
+        while ($this->position < strlen($this->code)) {
+            $char = $this->code[$this->position];
+            
+            if ($this->mode === self::MODE_PHP) {
+                // Handle PHP opening tag
+                if (substr($this->code, $this->position, 5) === '<?php') {
+                    $this->tokens[] = new Token(T_OPEN_TAG, '<?php', $this->line);
+                    $this->position += 5;
+                    continue;
+                }
 
-        while ($pos < $len) {
-            error_log("Position $pos, Char '" . $code[$pos] . "', Mode $mode, Depth $depth, Buffer: '$buffer', InJSXText: " . ($inJSXText ? 'true' : 'false'));
+                if ($char === '<' && $this->isJSXStart()) {
+                    $this->mode = self::MODE_JSX;
+                    $this->jsxDepth++;
+                    $this->tokens[] = new Token(ord('<'), '<', $this->line);
+                    $this->position++;
+                    $tagName = $this->consumeJSXTagName();
+                    $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
+                    continue;
+                }
 
-            if ($pos === 0 && substr($code, 0, 5) === '<?php') {
-                error_log("Found PHP opening tag at position 0");
-                $this->tokens[] = new Token(T_OPEN_TAG, '<?php', $line);
-                $pos += 5;
-                $inPhpTag = true;
+                // Handle basic PHP tokens
+                if ($char === '$') {
+                    $varName = '';
+                    $this->position++;
+                    while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_')) {
+                        $varName .= $this->code[$this->position];
+                        $this->position++;
+                    }
+                    if (!empty($varName)) {
+                        $this->tokens[] = new Token(T_VARIABLE, '$' . $varName, $this->line);
+                    }
+                    continue;
+                }
+
+                if ($char === '=') {
+                    $this->tokens[] = new Token(ord('='), '=', $this->line);
+                    $this->position++;
+                    continue;
+                }
+
+                if ($char === ';') {
+                    $this->tokens[] = new Token(ord(';'), ';', $this->line);
+                    $this->position++;
+                    continue;
+                }
+
+                if (ctype_space($char)) {
+                    if ($char === "\n") {
+                        $this->line++;
+                    }
+                    $this->position++;
+                    continue;
+                }
+
+                $this->position++;
                 continue;
             }
 
-            $char = $code[$pos];
+            if ($this->mode === self::MODE_JSX) {
+                if ($char === '{') {
+                    if ($this->textBuffer !== '') {
+                        $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
+                        $this->textBuffer = '';
+                    }
 
-            if ($mode === self::MODE_PHP) {
-                if ($char === '<' && $pos + 1 < $len && ctype_alpha($code[$pos + 1])) {
-                    // Found potential JSX start
-                    $mode = self::MODE_JSX;
-                    $this->tokens[] = new Token(ord('<'), '<', $line);
-                    
-                    // Skip the opening angle bracket
-                    $pos++;
-                    
-                    // Skip whitespace
-                    while ($pos < $len && ctype_space($code[$pos])) {
-                        if ($code[$pos] === "\n") {
-                            $line++;
-                        }
-                        $pos++;
-                    }
-                    
-                    // Collect tag name
-                    $tagName = '';
-                    while ($pos < $len && (ctype_alnum($code[$pos]) || $code[$pos] === '_' || $code[$pos] === '-')) {
-                        $tagName .= $code[$pos];
-                        $pos++;
-                    }
-                    
-                    if (!empty($tagName)) {
-                        $this->tokens[] = new Token(T_STRING, $tagName, $line);
-                        $depth++;
-                    }
-                    continue;
-                }
-                
-                // Handle whitespace
-                if ($char === "\n") {
-                    $line++;
-                    $pos++;
-                    continue;
-                } else if (ctype_space($char)) {
-                    $pos++;
-                    continue;
-                }
-                
-                // Handle variable declaration
-                if ($char === '$') {
-                    $varName = '';
-                    $i = $pos;
-                    while ($i < $len && (ctype_alnum($code[$i]) || $code[$i] === '_' || $code[$i] === '$')) {
-                        $varName .= $code[$i];
-                        $i++;
-                    }
-                    
-                    if (!empty($varName)) {
-                        $this->tokens[] = new Token(T_VARIABLE, $varName, $line);
-                        $pos = $i;
+                    // Check for spread operator
+                    if ($this->position + 3 < strlen($this->code) &&
+                        $this->code[$this->position + 1] === '.' &&
+                        $this->code[$this->position + 2] === '.' &&
+                        $this->code[$this->position + 3] === '.') {
+                        $this->tokens[] = new Token(ord('.'), '.', $this->line);
+                        $this->tokens[] = new Token(ord('.'), '.', $this->line);
+                        $this->tokens[] = new Token(ord('.'), '.', $this->line);
+                        $this->position += 4;
+                        $this->mode = self::MODE_JSX_EXPR;
                         continue;
                     }
-                }
-                
-                // Handle assignment operator
-                if ($char === '=') {
-                    $this->tokens[] = new Token(ord('='), '=', $line);
-                    $pos++;
+
+                    $this->tokens[] = new Token(ord('{'), '{', $this->line);
+                    $this->mode = self::MODE_JSX_EXPR;
+                    $this->position++;
                     continue;
                 }
-                
-                // Handle semicolon
-                if ($char === ';') {
-                    $this->tokens[] = new Token(ord(';'), ';', $line);
-                    $pos++;
-                    continue;
-                }
-                
-                $pos++;
-            } else if ($mode === self::MODE_JSX) {
-                if ($char === '<') {
-                    if (!empty($buffer)) {
-                        // Emit JSX text content as T_CONSTANT_ENCAPSED_STRING
-                        $trimmedBuffer = trim($buffer);
-                        if (!empty($trimmedBuffer)) {
-                            $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, '"' . addslashes($trimmedBuffer) . '"', $line);
-                        }
-                        $buffer = '';
+
+                if ($char === '<' && $this->position + 1 < strlen($this->code) && $this->code[$this->position + 1] === '/') {
+                    if ($this->textBuffer !== '') {
+                        $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
+                        $this->textBuffer = '';
                     }
-                    
-                    $this->tokens[] = new Token(ord('<'), '<', $line);
-                    $pos++;
-                    
-                    // Check if it's a closing tag
-                    $isClosingTag = false;
-                    if ($pos < $len && $code[$pos] === '/') {
-                        $isClosingTag = true;
-                        $this->tokens[] = new Token(ord('/'), '/', $line);
-                        $pos++;
-                    }
-                    
-                    // Skip whitespace
-                    while ($pos < $len && ctype_space($code[$pos])) {
-                        if ($code[$pos] === "\n") {
-                            $line++;
-                        }
-                        $pos++;
-                    }
-                    
-                    // Collect tag name
+                    $this->tokens[] = new Token(ord('<'), '<', $this->line);
+                    $this->tokens[] = new Token(ord('/'), '/', $this->line);
+                    $this->position += 2;
+
+                    // Get the closing tag name
                     $tagName = '';
-                    while ($pos < $len && (ctype_alnum($code[$pos]) || $code[$pos] === '_' || $code[$pos] === '-')) {
-                        $tagName .= $code[$pos];
-                        $pos++;
+                    while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_' || $this->code[$this->position] === '-')) {
+                        $tagName .= $this->code[$this->position];
+                        $this->position++;
                     }
-                    
                     if (!empty($tagName)) {
-                        $this->tokens[] = new Token(T_STRING, $tagName, $line);
-                        if ($isClosingTag) {
-                            $depth--;
-                        } else {
-                            $depth++;
+                        error_log("Found closing tag name: " . $tagName);
+                        $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
+                    }
+
+                    // Skip to closing >
+                    while ($this->position < strlen($this->code) && $this->code[$this->position] !== '>') {
+                        if ($this->code[$this->position] === "\n") $this->line++;
+                        $this->position++;
+                    }
+                    if ($this->position < strlen($this->code) && $this->code[$this->position] === '>') {
+                        $this->tokens[] = new Token(ord('>'), '>', $this->line);
+                        $this->position++;
+                        $this->jsxDepth--;
+                        if ($this->jsxDepth === 0) {
+                            error_log("Exiting JSX mode");
+                            $this->mode = self::MODE_PHP;
                         }
                     }
-                } else if ($char === '>') {
-                    $this->tokens[] = new Token(ord('>'), '>', $line);
-                    $pos++;
-                    
-                    if ($depth === 0) {
-                        $mode = self::MODE_PHP;
-                        $inJSXText = false;
-                    } else {
-                        $inJSXText = true;
-                    }
-                } else if ($inJSXText) {
-                    if ($char === "\n") {
-                        $line++;
-                    }
-                    $buffer .= $char;
-                    $pos++;
-                } else {
-                    // Skip whitespace between attributes
-                    if ($char === "\n") {
-                        $line++;
-                    }
-                    $pos++;
+                    continue;
                 }
+
+                if ($char === '>' || ($char === '/' && $this->position + 1 < strlen($this->code) && $this->code[$this->position + 1] === '>')) {
+                    if ($char === '/') {
+                        $this->tokens[] = new Token(ord('/'), '/', $this->line);
+                        $this->position++;
+                        $this->jsxDepth--;
+                        if ($this->jsxDepth === 0) {
+                            error_log("Exiting JSX mode");
+                            $this->mode = self::MODE_PHP;
+                        }
+                    }
+                    $this->tokens[] = new Token(ord('>'), '>', $this->line);
+                    $this->position++;
+                    $this->inJSXText = true;
+                    continue;
+                }
+
+                if ($this->inJSXText) {
+                    if (!ctype_space($char) || $this->textBuffer !== '') {
+                        $this->textBuffer .= $char;
+                    }
+                    $this->position++;
+                    continue;
+                }
+
+                if (ctype_alpha($char) || $char === '_' || $char === '-') {
+                    $attrName = '';
+                    while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_' || $this->code[$this->position] === '-')) {
+                        $attrName .= $this->code[$this->position];
+                        $this->position++;
+                    }
+                    if (!empty($attrName)) {
+                        error_log("Found JSX attribute name: " . $attrName);
+                        $this->tokens[] = new Token(T_STRING, $attrName, $this->line);
+                    }
+
+                    // Look for equals sign
+                    while ($this->position < strlen($this->code) && ctype_space($this->code[$this->position])) {
+                        if ($this->code[$this->position] === "\n") $this->line++;
+                        $this->position++;
+                    }
+
+                    if ($this->position < strlen($this->code) && $this->code[$this->position] === '=') {
+                        error_log("Found attribute equals sign");
+                        $this->tokens[] = new Token(ord('='), '=', $this->line);
+                        $this->position++;
+
+                        // Skip whitespace
+                        while ($this->position < strlen($this->code) && ctype_space($this->code[$this->position])) {
+                            if ($this->code[$this->position] === "\n") $this->line++;
+                            $this->position++;
+                        }
+
+                        if ($this->code[$this->position] === '{') {
+                            error_log("Found JSX expression start in attribute");
+                            $this->tokens[] = new Token(ord('{'), '{', $this->line);
+                            $this->mode = self::MODE_JSX_EXPR;
+                            $this->position++;
+                        } else if ($this->code[$this->position] === '"') {
+                            error_log("Found quoted attribute value");
+                            $this->position++;
+                            $value = '';
+                            while ($this->position < strlen($this->code) && $this->code[$this->position] !== '"') {
+                                $value .= $this->code[$this->position];
+                                $this->position++;
+                            }
+                            $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $value, $this->line);
+                            $this->position++;
+                        }
+                    }
+                    continue;
+                }
+
+                if (ctype_space($char)) {
+                    if ($char === "\n") {
+                        $this->line++;
+                    }
+                    $this->position++;
+                    continue;
+                }
+
+                $this->position++;
+                continue;
+            }
+
+            if ($this->mode === self::MODE_JSX_EXPR) {
+                if ($char === '}') {
+                    $this->mode = self::MODE_JSX;
+                    $this->tokens[] = new Token(ord('}'), '}', $this->line);
+                    $this->position++;
+                    continue;
+                }
+
+                if ($char === '$') {
+                    $varName = '';
+                    $this->position++;
+                    while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_')) {
+                        $varName .= $this->code[$this->position];
+                        $this->position++;
+                    }
+                    if (!empty($varName)) {
+                        error_log("Found variable in JSX expression");
+                        $this->tokens[] = new Token(T_VARIABLE, '$' . $varName, $this->line);
+                    }
+                    continue;
+                }
+
+                if (ctype_space($char)) {
+                    if ($char === "\n") {
+                        $this->line++;
+                    }
+                    $this->position++;
+                    continue;
+                }
+
+                $this->position++;
+                continue;
             }
         }
 
-        if ($inPhpTag) {
-            error_log("Adding closing PHP tag");
-            $this->tokens[] = new Token(T_CLOSE_TAG, '?>', $line);
+        // Emit any remaining text buffer
+        if ($this->textBuffer !== '') {
+            $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
         }
 
-        // Add sentinel token
-        $this->tokens[] = new Token(0, "\0", $line, $pos);
+        // Add EOF token
+        $this->tokens[] = new Token(0, '', $this->line);
 
-        error_log("Final token stream: " . print_r($this->tokens, true));
         return $this->tokens;
     }
 
-    private function isJSXStart(string $code, int $pos): bool
+    private function isJSXStart(): bool
     {
-        // Skip whitespace
-        $i = $pos + 1;
-        while ($i < strlen($code) && ctype_space($code[$i])) {
+        // Skip any whitespace after <
+        $i = $this->position + 1;
+        while ($i < strlen($this->code) && ctype_space($this->code[$i])) {
+            if ($this->code[$i] === "\n") $this->line++;
             $i++;
         }
 
-        // Check if we're in a valid context for JSX
-        $prevChar = $pos > 0 ? $code[$pos - 1] : null;
-        $isValidContext = $prevChar === null || 
-                         $prevChar === '=' || 
-                         $prevChar === '(' || 
-                         $prevChar === ',' || 
-                         $prevChar === ';' || 
-                         ctype_space($prevChar);
+        // Check if next character is a valid JSX tag start
+        return $i < strlen($this->code) && (ctype_alpha($this->code[$i]) || $this->code[$i] === '_');
+    }
 
-        // Check if next char is a valid JSX tag start
-        $nextChar = $i < strlen($code) ? $code[$i] : null;
-        $result = $isValidContext && $nextChar !== null && (
-            ctype_alpha($nextChar) ||
-            $nextChar === '_'
-        );
-
-        error_log(sprintf(
-            "isJSXStart check at pos %d: prevChar='%s', nextChar='%s', result=%s",
-            $pos,
-            $prevChar,
-            $nextChar,
-            $result ? 'true' : 'false'
-        ));
-
-        return $result;
+    private function consumeJSXTagName(): string
+    {
+        $tagName = '';
+        while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_' || $this->code[$this->position] === '-')) {
+            $tagName .= $this->code[$this->position];
+            $this->position++;
+        }
+        if (!empty($tagName)) {
+            error_log("Found JSX tag: " . $tagName);
+        }
+        return $tagName;
     }
 } 
