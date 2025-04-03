@@ -4,8 +4,9 @@ namespace PhpParser\Node\JSX;
 
 use PhpParser\Node;
 use PhpParser\Node\Expr;
+use PhpParser\NodeAbstract;
 
-class ExpressionContainer extends Node {
+class ExpressionContainer extends NodeAbstract {
     /** @var Expr */
     public $expression;
 

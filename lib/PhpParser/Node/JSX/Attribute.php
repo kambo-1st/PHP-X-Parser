@@ -4,8 +4,9 @@ namespace PhpParser\Node\JSX;
 
 use PhpParser\Node;
 use PhpParser\Node\Expr;
+use PhpParser\NodeAbstract;
 
-class Attribute extends Node {
+class Attribute extends NodeAbstract {
     /** @var string */
     public $name;
     /** @var Expr|null */

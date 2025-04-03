@@ -3,12 +3,13 @@
 namespace PhpParser\Node\JSX;
 
 use PhpParser\Node;
+use PhpParser\NodeAbstract;
 
-class Element extends Node {
+class Element extends NodeAbstract {
     /** @var string */
     public $name;
     /** @var Node[] */
-    public $attributes;
+    public $jsxAttributes;
     /** @var Node[] */
     public $children;
     /** @var string|null */
@@ -16,27 +17,27 @@ class Element extends Node {
 
     /**
      * @param string $name Tag name
-     * @param Node[] $attributes List of attributes
+     * @param Node[] $jsxAttributes List of attributes
      * @param Node[] $children List of children
      * @param string|null $closingName Closing tag name (null for self-closing tags)
-     * @param array<string, mixed> $attributes Additional attributes
+     * @param array<string, mixed> $nodeAttributes Additional node attributes
      */
     public function __construct(
         string $name,
-        array $attributes,
+        array $jsxAttributes,
         array $children,
         ?string $closingName = null,
-        array $attributes = []
+        array $nodeAttributes = []
     ) {
         $this->name = $name;
-        $this->attributes = $attributes;
+        $this->jsxAttributes = $jsxAttributes;
         $this->children = $children;
         $this->closingName = $closingName;
-        parent::__construct($attributes);
+        parent::__construct($nodeAttributes);
     }
 
     public function getSubNodeNames(): array {
-        return ['name', 'attributes', 'children', 'closingName'];
+        return ['name', 'jsxAttributes', 'children', 'closingName'];
     }
 
     public function getType(): string {

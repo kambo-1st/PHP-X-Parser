@@ -25,6 +25,9 @@ class JSX extends Lexer {
     /** @var array */
     private $tokens = [];
 
+    /** @var array */
+    private $options = [];
+
     /**
      * Creates a Lexer.
      *
@@ -34,7 +37,7 @@ class JSX extends Lexer {
      */
     public function __construct(array $options = [])
     {
-        parent::__construct($options);
+        $this->options = $options;
     }
 
     /**
@@ -62,8 +65,8 @@ class JSX extends Lexer {
                 case self::MODE_PHP:
                     if ($char === '<' && $this->isJSXStart($code, $pos)) {
                         // Convert JSX element into array syntax
-                        $this->tokens[] = [Tokens::T_ARRAY, 'array', $pos];
-                        $this->tokens[] = ['(', '(', $pos];
+                        $this->tokens[] = new Token(Tokens::T_ARRAY, 'array', $pos);
+                        $this->tokens[] = new Token(ord('('), '(', $pos);
                         $this->mode = self::MODE_JSX;
                         $this->jsxDepth++;
                         $pos++;
@@ -74,7 +77,7 @@ class JSX extends Lexer {
                 case self::MODE_JSX:
                     if ($char === '{') {
                         if ($this->buffer !== '') {
-                            $this->tokens[] = [Tokens::T_CONSTANT_ENCAPSED_STRING, '"' . $this->buffer . '"', $pos - strlen($this->buffer)];
+                            $this->tokens[] = new Token(Tokens::T_CONSTANT_ENCAPSED_STRING, '"' . $this->buffer . '"', $pos - strlen($this->buffer));
                             $this->buffer = '';
                         }
                         $this->mode = self::MODE_JSX_EXPR;
@@ -83,10 +86,10 @@ class JSX extends Lexer {
                     }
                     if ($char === '>') {
                         if ($this->buffer !== '') {
-                            $this->tokens[] = [Tokens::T_CONSTANT_ENCAPSED_STRING, '"' . $this->buffer . '"', $pos - strlen($this->buffer)];
+                            $this->tokens[] = new Token(Tokens::T_CONSTANT_ENCAPSED_STRING, '"' . $this->buffer . '"', $pos - strlen($this->buffer));
                             $this->buffer = '';
                         }
-                        $this->tokens[] = [')', ')', $pos];
+                        $this->tokens[] = new Token(ord(')'), ')', $pos);
                         $pos++;
                         continue 2;
                     }
@@ -96,10 +99,10 @@ class JSX extends Lexer {
                             $this->mode = self::MODE_PHP;
                         }
                         if ($this->buffer !== '') {
-                            $this->tokens[] = [Tokens::T_CONSTANT_ENCAPSED_STRING, '"' . $this->buffer . '"', $pos - strlen($this->buffer)];
+                            $this->tokens[] = new Token(Tokens::T_CONSTANT_ENCAPSED_STRING, '"' . $this->buffer . '"', $pos - strlen($this->buffer));
                             $this->buffer = '';
                         }
-                        $this->tokens[] = [')', ')', $pos];
+                        $this->tokens[] = new Token(ord(')'), ')', $pos);
                         $pos += 2;
                         continue 2;
                     }
@@ -109,16 +112,16 @@ class JSX extends Lexer {
                             $this->mode = self::MODE_PHP;
                         }
                         if ($this->buffer !== '') {
-                            $this->tokens[] = [Tokens::T_CONSTANT_ENCAPSED_STRING, '"' . $this->buffer . '"', $pos - strlen($this->buffer)];
+                            $this->tokens[] = new Token(Tokens::T_CONSTANT_ENCAPSED_STRING, '"' . $this->buffer . '"', $pos - strlen($this->buffer));
                             $this->buffer = '';
                         }
-                        $this->tokens[] = [')', ')', $pos];
+                        $this->tokens[] = new Token(ord(')'), ')', $pos);
                         $pos += 2;
                         continue 2;
                     }
                     if (ctype_space($char)) {
                         if ($this->buffer !== '') {
-                            $this->tokens[] = [Tokens::T_CONSTANT_ENCAPSED_STRING, '"' . $this->buffer . '"', $pos - strlen($this->buffer)];
+                            $this->tokens[] = new Token(Tokens::T_CONSTANT_ENCAPSED_STRING, '"' . $this->buffer . '"', $pos - strlen($this->buffer));
                             $this->buffer = '';
                         }
                         $pos++;
@@ -138,12 +141,12 @@ class JSX extends Lexer {
             }
 
             // Default PHP tokenization
-            $token = parent::getNextToken($code, $pos, $errorHandler);
+            $token = parent::tokenize($code, $errorHandler);
             if ($token === null) {
                 break;
             }
-            $this->tokens[] = $token;
-            $pos += strlen($token[1]);
+            $this->tokens = array_merge($this->tokens, $token);
+            $pos += strlen($token[0]->text);
         }
 
         return $this->tokens;
