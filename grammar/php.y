@@ -409,7 +409,7 @@ non_empty_statement:
 statement:
       non_empty_statement
     | ';'                                                   { makeNop($$); }
-    | jsx_element
+    | jsx_element                                           { $$ = $1; }
 ;
 
 blocklike_statement:
@@ -1012,6 +1012,7 @@ expr:
           }
     | new_expr
     | match
+    | jsx_element                                          { $$ = $1; }
     | T_CLONE expr                                          { $$ = Expr\Clone_[$2]; }
     | variable T_PLUS_EQUAL expr                            { $$ = Expr\AssignOp\Plus      [$1, $3]; }
     | variable T_MINUS_EQUAL expr                           { $$ = Expr\AssignOp\Minus     [$1, $3]; }
@@ -1430,105 +1431,56 @@ encaps_var_offset:
 ;
 
 jsx_element:
-    '<' jsx_element_name jsx_attributes_opt '>' jsx_children_opt '<' '/' jsx_element_name '>'
-        { $$ = Node\JSXElement[$2, $3, $5]; }
-    | '<' jsx_element_name jsx_attributes_opt '/>'
-        { $$ = Node\JSXElement[$2, $3, []]; }
-    | '<>' jsx_children_opt '</>'
-        { $$ = Node\JSXFragment[$2]; }
-    | error '>'
-        { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Unexpected characters before closing tag'); }
-    | '<' error
-        { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Unexpected characters after opening tag'); }
-    | '<' jsx_element_name error
-        { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Invalid attribute or closing tag'); }
-    | '<' jsx_element_name jsx_attributes_opt error
-        { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Expected closing tag or self-closing tag'); }
-    ;
-
-jsx_attributes_opt:
-    /* empty */
-    | jsx_attributes
-    ;
+      '<' T_STRING jsx_attributes '>' jsx_children '<' '/' T_STRING '>'
+          { $$ = Node\JSX\Element[$2, $3, $5, $8]; }
+    | '<' T_STRING jsx_attributes '/' '>'
+          { $$ = Node\JSX\Element[$2, $3, [], null]; }
+;
 
 jsx_attributes:
-    jsx_attribute
-        { init($1); }
-    | jsx_attributes jsx_attribute
-        { push($1, $2); }
-    | jsx_attributes '...' expr
-        { push($1, Node\JSXSpreadAttribute[$3]); }
-    | error
-        { $$ = null; $this->handleJSXError('Invalid attribute syntax'); }
-    ;
+      /* empty */                                           { $$ = []; }
+    | jsx_attributes jsx_attribute                          { push($1, $2); }
+;
 
 jsx_attribute:
-    '[a-zA-Z_][a-zA-Z0-9_]*' '=' jsx_attribute_value
-        { $$ = Node\JSXAttribute[$1, $3]; }
-    | '[a-zA-Z_][a-zA-Z0-9_]*'
-        { $$ = Node\JSXAttribute[$1, Scalar\String_::fromString('true', attributes())]; }
-    | '[a-zA-Z_][a-zA-Z0-9_]*' '=' '{' expr '}'
-        { $$ = Node\JSXAttribute[$1, $4]; }
-    | error
-        { $$ = null; $this->handleJSXError('Invalid attribute syntax'); }
-    ;
+      T_STRING '=' jsx_attribute_value                      { $$ = Node\JSX\Attribute[$1, $3]; }
+    | T_STRING                                              { $$ = Node\JSX\Attribute[$1, null]; }
+    | '.' '.' '.' expr '}'                                  { $$ = Node\JSX\SpreadAttribute[$4]; }
+;
 
 jsx_attribute_value:
-    T_CONSTANT_ENCAPSED_STRING
-        { $$ = Scalar\String_::fromString($1, attributes()); }
-    | '{' expr '}'
-        { $$ = $2; }
-    | T_LNUMBER
-        { $$ = Scalar\LNumber[$1, attributes()]; }
-    | T_DNUMBER
-        { $$ = Scalar\DNumber[$1, attributes()]; }
-    | T_STRING
-        { $$ = Scalar\String_[$1, attributes()]; }
-    | array_short_syntax
-        { $$ = $1; }
-    ;
-
-jsx_children_opt:
-    /* empty */
-    | jsx_children
-    ;
+      T_CONSTANT_ENCAPSED_STRING                           { $$ = Scalar\String_[$1]; }
+    | '{' expr '}'                                         { $$ = $2; }
+;
 
 jsx_children:
-    jsx_child
-        { init($1); }
-    | jsx_children jsx_child
-        { push($1, $2); }
-    ;
+      /* empty */                                           { $$ = []; }
+    | jsx_children jsx_child                                { push($1, $2); }
+;
 
 jsx_child:
-    '[^<{]+'
-        { $$ = Node\JSXText[$1]; }
-    | '{' expr '}'
-        { $$ = Node\JSXExpression[$2]; }
-    | '{/*' '*/}'
-        { $$ = null; }
-    | jsx_element
-        { $$ = $1; }
-    ;
-
-jsx_element_name:
-    T_STRING
-        { $$ = Node\Identifier[$1]; }
-    | T_NAMESPACE
-        { $$ = Node\Name[$1]; }
-    | T_NS_SEPARATOR T_STRING
-        { $$ = Node\Name[$2]; }
-    ;
+      T_CONSTANT_ENCAPSED_STRING                           { $$ = Node\JSX\Text[$1]; }
+    | '{' expr '}'                                         { $$ = Node\JSX\ExpressionContainer[$2]; }
+    | jsx_element                                          { $$ = $1; }
+;
 
 %%
 
 // Lexer rules for JSX syntax
 '<' {
     if ($this->state === LEXER_STATE_NORMAL) {
-        // Check if this is the start of a JSX element
+        // Only enter JSX mode if we're in a JSX context
+        // Check if this is part of a JSX element by looking at the surrounding context
+        $prevToken = $this->getPreviousToken();
         $nextChar = $this->lookahead();
-        if ($nextChar === '>' || $nextChar === '/' || ctype_alpha($nextChar)) {
+        
+        // Only enter JSX mode if:
+        // 1. We're at the start of a statement or after a semicolon
+        // 2. The next character is a valid JSX start
+        if (($prevToken === null || $prevToken === ';' || $prevToken === '{') && 
+            ($nextChar === '>' || $nextChar === '/' || ctype_alpha($nextChar))) {
             $this->state = LEXER_STATE_JSX;
+            return '<';
         }
     }
     return '<';
@@ -1537,15 +1489,30 @@ jsx_element_name:
 '>' {
     if ($this->state === LEXER_STATE_JSX) {
         $this->state = LEXER_STATE_NORMAL;
+        return '>';
     }
     return '>';
+}
+
+'/' {
+    if ($this->state === LEXER_STATE_JSX) {
+        $nextChar = $this->lookahead();
+        if ($nextChar === '>') {
+            $this->state = LEXER_STATE_NORMAL;
+            return '/>';
+        }
+    }
+    return '/';
 }
 
 '/>' {
     if ($this->state === LEXER_STATE_JSX) {
         $this->state = LEXER_STATE_NORMAL;
+        return '/>';
     }
-    return '/>';
+    // In normal PHP mode, treat this as two separate tokens
+    $this->yypushback(1);
+    return '/';
 }
 
 '<>' {
@@ -1555,16 +1522,10 @@ jsx_element_name:
     return '<>';
 }
 
-'</>' {
-    if ($this->state === LEXER_STATE_JSX) {
-        $this->state = LEXER_STATE_NORMAL;
-    }
-    return '</>';
-}
-
 '{' {
     if ($this->state === LEXER_STATE_JSX) {
         $this->state = LEXER_STATE_JSX_EXPRESSION;
+        return '{';
     }
     return '{';
 }
@@ -1572,6 +1533,7 @@ jsx_element_name:
 '}' {
     if ($this->state === LEXER_STATE_JSX_EXPRESSION) {
         $this->state = LEXER_STATE_JSX;
+        return '}';
     }
     return '}';
 }
@@ -1599,9 +1561,16 @@ jsx_element_name:
 
 '[^<{]+' {
     if ($this->state === LEXER_STATE_JSX) {
-        return $1;
+        return T_STRING;
     }
     return $1;
+}
+
+'[a-zA-Z_][a-zA-Z0-9_]*' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return T_STRING;
+    }
+    return T_STRING;
 }
 
 // Whitespace handling
