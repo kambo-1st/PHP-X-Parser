@@ -21,7 +21,6 @@
 %left T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG
 %nonassoc T_IS_EQUAL T_IS_NOT_EQUAL T_IS_IDENTICAL T_IS_NOT_IDENTICAL T_SPACESHIP
 %nonassoc '<' T_IS_SMALLER_OR_EQUAL '>' T_IS_GREATER_OR_EQUAL
-%nonassoc T_JSX_OPEN T_JSX_CLOSE
 #if PHP7
 %left T_SL T_SR
 %left '+' '-' '.'
@@ -125,13 +124,6 @@
 %token T_NAME_RELATIVE
 %token T_ATTRIBUTE
 %token T_ENUM
-%token T_JSX_OPEN '<'
-%token T_JSX_CLOSE '>'
-%token T_JSX_SELF_CLOSE '/>'
-%token T_JSX_ATTRIBUTE_NAME '[a-zA-Z_][a-zA-Z0-9_]*'
-%token T_JSX_EXPRESSION_START '{'
-%token T_JSX_EXPRESSION_END '}'
-%token T_JSX_TEXT '[^<{]+'
 
 %%
 
@@ -1438,17 +1430,19 @@ encaps_var_offset:
 ;
 
 jsx_element:
-    T_JSX_OPEN jsx_element_name jsx_attributes_opt T_JSX_CLOSE jsx_children_opt T_JSX_OPEN '/' jsx_element_name T_JSX_CLOSE
+    '<' jsx_element_name jsx_attributes_opt '>' jsx_children_opt '<' '/' jsx_element_name '>'
         { $$ = Node\JSXElement[$2, $3, $5]; }
-    | T_JSX_OPEN jsx_element_name jsx_attributes_opt T_JSX_SELF_CLOSE
+    | '<' jsx_element_name jsx_attributes_opt '/>'
         { $$ = Node\JSXElement[$2, $3, []]; }
-    | error T_JSX_CLOSE
+    | '<>' jsx_children_opt '</>'
+        { $$ = Node\JSXFragment[$2]; }
+    | error '>'
         { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Unexpected characters before closing tag'); }
-    | T_JSX_OPEN error
+    | '<' error
         { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Unexpected characters after opening tag'); }
-    | T_JSX_OPEN jsx_element_name error
+    | '<' jsx_element_name error
         { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Invalid attribute or closing tag'); }
-    | T_JSX_OPEN jsx_element_name jsx_attributes_opt error
+    | '<' jsx_element_name jsx_attributes_opt error
         { $$ = null; $this->state = LEXER_STATE_NORMAL; $this->handleJSXError('Expected closing tag or self-closing tag'); }
     ;
 
@@ -1462,16 +1456,18 @@ jsx_attributes:
         { init($1); }
     | jsx_attributes jsx_attribute
         { push($1, $2); }
+    | jsx_attributes '...' expr
+        { push($1, Node\JSXSpreadAttribute[$3]); }
     | error
         { $$ = null; $this->handleJSXError('Invalid attribute syntax'); }
     ;
 
 jsx_attribute:
-    T_JSX_ATTRIBUTE_NAME '=' jsx_attribute_value
+    '[a-zA-Z_][a-zA-Z0-9_]*' '=' jsx_attribute_value
         { $$ = Node\JSXAttribute[$1, $3]; }
-    | T_JSX_ATTRIBUTE_NAME
+    | '[a-zA-Z_][a-zA-Z0-9_]*'
         { $$ = Node\JSXAttribute[$1, Scalar\String_::fromString('true', attributes())]; }
-    | T_JSX_ATTRIBUTE_NAME '=' T_JSX_EXPRESSION_START expr T_JSX_EXPRESSION_END
+    | '[a-zA-Z_][a-zA-Z0-9_]*' '=' '{' expr '}'
         { $$ = Node\JSXAttribute[$1, $4]; }
     | error
         { $$ = null; $this->handleJSXError('Invalid attribute syntax'); }
@@ -1480,7 +1476,7 @@ jsx_attribute:
 jsx_attribute_value:
     T_CONSTANT_ENCAPSED_STRING
         { $$ = Scalar\String_::fromString($1, attributes()); }
-    | T_JSX_EXPRESSION_START expr T_JSX_EXPRESSION_END
+    | '{' expr '}'
         { $$ = $2; }
     | T_LNUMBER
         { $$ = Scalar\LNumber[$1, attributes()]; }
@@ -1488,6 +1484,8 @@ jsx_attribute_value:
         { $$ = Scalar\DNumber[$1, attributes()]; }
     | T_STRING
         { $$ = Scalar\String_[$1, attributes()]; }
+    | array_short_syntax
+        { $$ = $1; }
     ;
 
 jsx_children_opt:
@@ -1503,19 +1501,14 @@ jsx_children:
     ;
 
 jsx_child:
-    jsx_text
-        { $$ = $1; }
-    | T_JSX_EXPRESSION_START expr T_JSX_EXPRESSION_END
+    '[^<{]+'
+        { $$ = Node\JSXText[$1]; }
+    | '{' expr '}'
         { $$ = Node\JSXExpression[$2]; }
+    | '{/*' '*/}'
+        { $$ = null; }
     | jsx_element
         { $$ = $1; }
-    ;
-
-jsx_text:
-    T_JSX_TEXT
-        { $$ = Node\JSXText[$1]; }
-    | T_JSX_TEXT T_JSX_TEXT
-        { $$ = Node\JSXText[$1 . $2]; }
     ;
 
 jsx_element_name:
@@ -1529,52 +1522,86 @@ jsx_element_name:
 
 %%
 
-// Lexer rules
+// Lexer rules for JSX syntax
 '<' {
     if ($this->state === LEXER_STATE_NORMAL) {
-        $this->state = LEXER_STATE_JSX;
-        return T_JSX_OPEN;
+        // Check if this is the start of a JSX element
+        $nextChar = $this->lookahead();
+        if ($nextChar === '>' || $nextChar === '/' || ctype_alpha($nextChar)) {
+            $this->state = LEXER_STATE_JSX;
+        }
     }
+    return '<';
 }
 
 '>' {
     if ($this->state === LEXER_STATE_JSX) {
         $this->state = LEXER_STATE_NORMAL;
-        return T_JSX_CLOSE;
     }
+    return '>';
 }
 
 '/>' {
     if ($this->state === LEXER_STATE_JSX) {
         $this->state = LEXER_STATE_NORMAL;
-        return T_JSX_SELF_CLOSE;
     }
+    return '/>';
 }
 
-'[a-zA-Z_][a-zA-Z0-9_]*' {
+'<>' {
     if ($this->state === LEXER_STATE_JSX) {
-        return T_JSX_ATTRIBUTE_NAME;
+        return '<>';
     }
+    return '<>';
+}
+
+'</>' {
+    if ($this->state === LEXER_STATE_JSX) {
+        $this->state = LEXER_STATE_NORMAL;
+    }
+    return '</>';
 }
 
 '{' {
     if ($this->state === LEXER_STATE_JSX) {
         $this->state = LEXER_STATE_JSX_EXPRESSION;
-        return T_JSX_EXPRESSION_START;
     }
+    return '{';
 }
 
 '}' {
     if ($this->state === LEXER_STATE_JSX_EXPRESSION) {
         $this->state = LEXER_STATE_JSX;
-        return T_JSX_EXPRESSION_END;
     }
+    return '}';
+}
+
+'{/*' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return '{/*';
+    }
+    return '{/*';
+}
+
+'*/}' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return '*/}';
+    }
+    return '*/}';
+}
+
+'...' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return '...';
+    }
+    return '...';
 }
 
 '[^<{]+' {
     if ($this->state === LEXER_STATE_JSX) {
-        return T_JSX_TEXT;
+        return $1;
     }
+    return $1;
 }
 
 // Whitespace handling
@@ -1582,10 +1609,11 @@ jsx_element_name:
     if ($this->state === LEXER_STATE_JSX) {
         $text = $this->normalizeJSXText($1);
         if ($this->preserveWhitespace) {
-            return T_JSX_TEXT;
+            return $text;
         }
-        return T_JSX_TEXT;
+        return $text;
     }
+    return $1;
 }
 
 // Text normalization
