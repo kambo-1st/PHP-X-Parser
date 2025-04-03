@@ -3,9 +3,9 @@
 namespace PhpParser\Node\JSX;
 
 use PhpParser\Node;
-use PhpParser\NodeAbstract;
+use PhpParser\Node\Expr;
 
-class Element extends NodeAbstract {
+class Element extends Expr {
     /** @var string */
     public $name;
     /** @var Node[] */
@@ -29,11 +29,11 @@ class Element extends NodeAbstract {
         ?string $closingName = null,
         array $nodeAttributes = []
     ) {
+        parent::__construct($nodeAttributes);
         $this->name = $name;
         $this->jsxAttributes = $jsxAttributes;
         $this->children = $children;
         $this->closingName = $closingName;
-        parent::__construct($nodeAttributes);
     }
 
     public function getSubNodeNames(): array {
