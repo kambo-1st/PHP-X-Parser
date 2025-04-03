@@ -52,7 +52,7 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         $jsxElement = $expr->expr;
         $this->assertInstanceOf(Element::class, $jsxElement);
         $this->assertEquals('div', $jsxElement->name);
-        $this->assertEmpty($jsxElement->attributes);
+        $this->assertEmpty($jsxElement->jsxAttributes);
         $this->assertCount(1, $jsxElement->children);
         $this->assertInstanceOf(Text::class, $jsxElement->children[0]);
         $this->assertEquals('Hello World', $jsxElement->children[0]->value);
@@ -75,17 +75,17 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         $jsxElement = $expr->expr;
         $this->assertInstanceOf(Element::class, $jsxElement);
         $this->assertEquals('div', $jsxElement->name);
-        $this->assertCount(2, $jsxElement->attributes);
+        $this->assertCount(2, $jsxElement->jsxAttributes);
         
-        $this->assertInstanceOf(Attribute::class, $jsxElement->attributes[0]);
-        $this->assertEquals('class', $jsxElement->attributes[0]->name);
-        $this->assertInstanceOf(String_::class, $jsxElement->attributes[0]->value);
-        $this->assertEquals('container', $jsxElement->attributes[0]->value->value);
+        $this->assertInstanceOf(Attribute::class, $jsxElement->jsxAttributes[0]);
+        $this->assertEquals('class', $jsxElement->jsxAttributes[0]->name);
+        $this->assertInstanceOf(String_::class, $jsxElement->jsxAttributes[0]->value);
+        $this->assertEquals('container', $jsxElement->jsxAttributes[0]->value->value);
         
-        $this->assertInstanceOf(Attribute::class, $jsxElement->attributes[1]);
-        $this->assertEquals('id', $jsxElement->attributes[1]->name);
-        $this->assertInstanceOf(Variable::class, $jsxElement->attributes[1]->value);
-        $this->assertEquals('id', $jsxElement->attributes[1]->value->name);
+        $this->assertInstanceOf(Attribute::class, $jsxElement->jsxAttributes[1]);
+        $this->assertEquals('id', $jsxElement->jsxAttributes[1]->name);
+        $this->assertInstanceOf(Variable::class, $jsxElement->jsxAttributes[1]->value);
+        $this->assertEquals('id', $jsxElement->jsxAttributes[1]->value->name);
         
         $this->assertCount(1, $jsxElement->children);
         $this->assertInstanceOf(Text::class, $jsxElement->children[0]);
@@ -109,11 +109,11 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         $jsxElement = $expr->expr;
         $this->assertInstanceOf(Element::class, $jsxElement);
         $this->assertEquals('div', $jsxElement->name);
-        $this->assertCount(1, $jsxElement->attributes);
+        $this->assertCount(1, $jsxElement->jsxAttributes);
         
-        $this->assertInstanceOf(SpreadAttribute::class, $jsxElement->attributes[0]);
-        $this->assertInstanceOf(Variable::class, $jsxElement->attributes[0]->expression);
-        $this->assertEquals('props', $jsxElement->attributes[0]->expression->name);
+        $this->assertInstanceOf(SpreadAttribute::class, $jsxElement->jsxAttributes[0]);
+        $this->assertInstanceOf(Variable::class, $jsxElement->jsxAttributes[0]->expression);
+        $this->assertEquals('props', $jsxElement->jsxAttributes[0]->expression->name);
         
         $this->assertCount(1, $jsxElement->children);
         $this->assertInstanceOf(Text::class, $jsxElement->children[0]);
@@ -137,7 +137,7 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         $jsxElement = $expr->expr;
         $this->assertInstanceOf(Element::class, $jsxElement);
         $this->assertEquals('div', $jsxElement->name);
-        $this->assertEmpty($jsxElement->attributes);
+        $this->assertEmpty($jsxElement->jsxAttributes);
         $this->assertCount(1, $jsxElement->children);
         
         $this->assertInstanceOf(ExpressionContainer::class, $jsxElement->children[0]);
@@ -163,12 +163,12 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         $jsxElement = $expr->expr;
         $this->assertInstanceOf(Element::class, $jsxElement);
         $this->assertEquals('img', $jsxElement->name);
-        $this->assertCount(1, $jsxElement->attributes);
+        $this->assertCount(1, $jsxElement->jsxAttributes);
         
-        $this->assertInstanceOf(Attribute::class, $jsxElement->attributes[0]);
-        $this->assertEquals('src', $jsxElement->attributes[0]->name);
-        $this->assertInstanceOf(String_::class, $jsxElement->attributes[0]->value);
-        $this->assertEquals('image.jpg', $jsxElement->attributes[0]->value->value);
+        $this->assertInstanceOf(Attribute::class, $jsxElement->jsxAttributes[0]);
+        $this->assertEquals('src', $jsxElement->jsxAttributes[0]->name);
+        $this->assertInstanceOf(String_::class, $jsxElement->jsxAttributes[0]->value);
+        $this->assertEquals('image.jpg', $jsxElement->jsxAttributes[0]->value->value);
         
         $this->assertEmpty($jsxElement->children);
         $this->assertNull($jsxElement->closingName);

@@ -2,16 +2,20 @@
 
 namespace PhpParser\Node\JSX;
 
-use PhpParser\Node;
+use PhpParser\NodeAbstract;
 use PhpParser\Node\Expr;
 
-class SpreadAttribute extends Node {
-    /** @var Expr */
-    public $expression;
+class SpreadAttribute extends NodeAbstract {
+    /** @var Expr Expression to spread */
+    public Expr $expression;
 
+    /**
+     * @param Expr $expression Expression to spread
+     * @param array<string, mixed> $attributes Additional attributes
+     */
     public function __construct(Expr $expression, array $attributes = []) {
-        parent::__construct($attributes);
         $this->expression = $expression;
+        $this->attributes = $attributes;
     }
 
     public function getSubNodeNames(): array {
