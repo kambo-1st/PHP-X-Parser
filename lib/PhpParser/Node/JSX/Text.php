@@ -2,9 +2,9 @@
 
 namespace PhpParser\Node\JSX;
 
-use PhpParser\Node;
+use PhpParser\NodeAbstract;
 
-class Text extends Node {
+class Text extends NodeAbstract {
     /** @var string */
     public $value;
 
