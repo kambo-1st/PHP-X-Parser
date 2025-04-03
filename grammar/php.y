@@ -133,9 +133,6 @@
 %token T_JSX_EXPRESSION_END '}'
 %token T_JSX_TEXT '[^<{]+'
 
-const LEXER_STATE_JSX = 'JSX';
-const LEXER_STATE_JSX_EXPRESSION = 'JSX_EXPRESSION';
-
 %%
 
 start:
@@ -1524,7 +1521,7 @@ jsx_text:
 jsx_element_name:
     T_STRING
         { $$ = Node\Identifier[$1]; }
-    | T_NAMESPACE_NAME
+    | T_NAMESPACE
         { $$ = Node\Name[$1]; }
     | T_NS_SEPARATOR T_STRING
         { $$ = Node\Name[$2]; }
@@ -1602,23 +1599,23 @@ function normalizeJSXText($text) {
         // Remove extra whitespace
         $text = preg_replace('/\s+/', ' ', $text);
     }
-    
+
     // Handle HTML entities
     $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    
+
     // Handle Unicode characters
     $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
-    
+
     // Handle special characters in attributes
     $text = preg_replace('/[\x00-\x1F\x7F]/u', '', $text);
-    
+
     return $text;
 }
 
 function normalizeJSXAttribute($name) {
     // Convert camelCase to kebab-case for HTML attributes
     $name = strtolower(preg_replace('/([a-z])([A-Z])/', '$1-$2', $name));
-    
+
     // Handle special attributes
     switch ($name) {
         case 'class':
