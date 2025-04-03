@@ -77,6 +77,8 @@ class JSX extends Lexer {
         $this->textBuffer = '';
         $this->line = 1;
 
+        error_log("Starting tokenization with mode: " . $this->mode . ", depth: " . $this->jsxDepth);
+
         while ($this->position < strlen($this->code)) {
             $char = $this->code[$this->position];
             
@@ -89,8 +91,14 @@ class JSX extends Lexer {
                 }
 
                 if ($char === '<' && $this->isJSXStart()) {
+                    error_log("Entering JSX mode at position " . $this->position . ", depth: " . $this->jsxDepth);
+                    if ($this->textBuffer !== '') {
+                        $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
+                        $this->textBuffer = '';
+                    }
                     $this->mode = self::MODE_JSX;
                     $this->jsxDepth++;
+                    $this->inJSXText = false;
                     $this->tokens[] = new Token(ord('<'), '<', $this->line);
                     $this->position++;
                     $tagName = $this->consumeJSXTagName();
@@ -162,42 +170,56 @@ class JSX extends Lexer {
                     continue;
                 }
 
-                if ($char === '<' && $this->position + 1 < strlen($this->code) && $this->code[$this->position + 1] === '/') {
+                if ($char === '<') {
                     if ($this->textBuffer !== '') {
                         $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
                         $this->textBuffer = '';
                     }
-                    $this->tokens[] = new Token(ord('<'), '<', $this->line);
-                    $this->tokens[] = new Token(ord('/'), '/', $this->line);
-                    $this->position += 2;
 
-                    // Get the closing tag name
-                    $tagName = '';
-                    while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_' || $this->code[$this->position] === '-')) {
-                        $tagName .= $this->code[$this->position];
-                        $this->position++;
-                    }
-                    if (!empty($tagName)) {
-                        $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
-                    }
+                    // Check for closing tag
+                    if ($this->position + 1 < strlen($this->code) && $this->code[$this->position + 1] === '/') {
+                        error_log("Found closing tag at position " . $this->position . ", depth: " . $this->jsxDepth);
+                        $this->tokens[] = new Token(ord('<'), '<', $this->line);
+                        $this->tokens[] = new Token(ord('/'), '/', $this->line);
+                        $this->position += 2;
 
-                    // Skip to closing >
-                    while ($this->position < strlen($this->code) && $this->code[$this->position] !== '>') {
-                        if ($this->code[$this->position] === "\n") $this->line++;
-                        $this->position++;
-                    }
-                    if ($this->position < strlen($this->code) && $this->code[$this->position] === '>') {
-                        $this->tokens[] = new Token(ord('>'), '>', $this->line);
-                        $this->position++;
-                        $this->jsxDepth--;
-                        if ($this->jsxDepth === 0) {
-                            $this->mode = self::MODE_PHP;
+                        // Get the closing tag name
+                        $tagName = '';
+                        while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_' || $this->code[$this->position] === '-')) {
+                            $tagName .= $this->code[$this->position];
+                            $this->position++;
                         }
+                        if (!empty($tagName)) {
+                            $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
+                        }
+
+                        // Skip to closing >
+                        while ($this->position < strlen($this->code) && $this->code[$this->position] !== '>') {
+                            if ($this->code[$this->position] === "\n") $this->line++;
+                            $this->position++;
+                        }
+                        if ($this->position < strlen($this->code) && $this->code[$this->position] === '>') {
+                            $this->tokens[] = new Token(ord('>'), '>', $this->line);
+                            $this->jsxDepth--;
+                            if ($this->jsxDepth === 0) {
+                                $this->mode = self::MODE_PHP;
+                            }
+                            $this->position++;
+                        }
+                        continue;
                     }
+
+                    // Handle opening tag
+                    $this->tokens[] = new Token(ord('<'), '<', $this->line);
+                    $this->position++;
+                    $this->jsxDepth++;
+                    $tagName = $this->consumeJSXTagName();
+                    $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
                     continue;
                 }
 
                 if ($char === '>' || ($char === '/' && $this->position + 1 < strlen($this->code) && $this->code[$this->position + 1] === '>')) {
+                    error_log("Found closing bracket at position " . $this->position . ", depth: " . $this->jsxDepth . ", inJSXText: " . ($this->inJSXText ? "true" : "false"));
                     if ($char === '/') {
                         $this->tokens[] = new Token(ord('/'), '/', $this->line);
                         $this->position++;
@@ -208,7 +230,11 @@ class JSX extends Lexer {
                     }
                     $this->tokens[] = new Token(ord('>'), '>', $this->line);
                     $this->position++;
-                    $this->inJSXText = true;
+                    if ($char !== '/') {
+                        $this->inJSXText = true;
+                        $this->textBuffer = '';
+                    }
+                    error_log("After closing bracket at position " . $this->position . ", depth: " . $this->jsxDepth . ", inJSXText: " . ($this->inJSXText ? "true" : "false"));
                     continue;
                 }
 
