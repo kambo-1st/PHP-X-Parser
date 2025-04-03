@@ -178,7 +178,6 @@ class JSX extends Lexer {
                         $this->position++;
                     }
                     if (!empty($tagName)) {
-                        error_log("Found closing tag name: " . $tagName);
                         $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
                     }
 
@@ -192,7 +191,6 @@ class JSX extends Lexer {
                         $this->position++;
                         $this->jsxDepth--;
                         if ($this->jsxDepth === 0) {
-                            error_log("Exiting JSX mode");
                             $this->mode = self::MODE_PHP;
                         }
                     }
@@ -205,7 +203,6 @@ class JSX extends Lexer {
                         $this->position++;
                         $this->jsxDepth--;
                         if ($this->jsxDepth === 0) {
-                            error_log("Exiting JSX mode");
                             $this->mode = self::MODE_PHP;
                         }
                     }
@@ -230,7 +227,6 @@ class JSX extends Lexer {
                         $this->position++;
                     }
                     if (!empty($attrName)) {
-                        error_log("Found JSX attribute name: " . $attrName);
                         $this->tokens[] = new Token(T_STRING, $attrName, $this->line);
                     }
 
@@ -241,7 +237,6 @@ class JSX extends Lexer {
                     }
 
                     if ($this->position < strlen($this->code) && $this->code[$this->position] === '=') {
-                        error_log("Found attribute equals sign");
                         $this->tokens[] = new Token(ord('='), '=', $this->line);
                         $this->position++;
 
@@ -252,12 +247,10 @@ class JSX extends Lexer {
                         }
 
                         if ($this->code[$this->position] === '{') {
-                            error_log("Found JSX expression start in attribute");
                             $this->tokens[] = new Token(ord('{'), '{', $this->line);
                             $this->mode = self::MODE_JSX_EXPR;
                             $this->position++;
                         } else if ($this->code[$this->position] === '"') {
-                            error_log("Found quoted attribute value");
                             $this->position++;
                             $value = '';
                             while ($this->position < strlen($this->code) && $this->code[$this->position] !== '"') {
@@ -299,7 +292,6 @@ class JSX extends Lexer {
                         $this->position++;
                     }
                     if (!empty($varName)) {
-                        error_log("Found variable in JSX expression");
                         $this->tokens[] = new Token(T_VARIABLE, '$' . $varName, $this->line);
                     }
                     continue;
@@ -349,9 +341,7 @@ class JSX extends Lexer {
             $tagName .= $this->code[$this->position];
             $this->position++;
         }
-        if (!empty($tagName)) {
-            error_log("Found JSX tag: " . $tagName);
-        }
+
         return $tagName;
     }
 } 
