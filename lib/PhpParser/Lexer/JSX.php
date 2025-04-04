@@ -226,8 +226,8 @@ class JSX extends Lexer {
                         $this->code[$this->position + 3] === '.') {
 
                         echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
-                        $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position-1];
-                        $startPosition = $this->position-1;
+                        $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
+                        $startPosition = $this->position;
 
                         if (!$extractRangesOnly) {
                             $this->tokens[] = new Token(ord('.'), '.', $this->line);
@@ -245,8 +245,8 @@ class JSX extends Lexer {
                     }
 
                     echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
-                    $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position-1];
-                    $startPosition = $this->position-1;
+                    $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
+                    $startPosition = $this->position;
 
                     $this->mode = self::MODE_JSX_EXPR;
                     $this->position++;
