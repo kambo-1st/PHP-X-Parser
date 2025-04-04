@@ -252,11 +252,13 @@ class JSX extends Lexer {
                         $this->position++;
                         $this->jsxDepth--;
                         if ($this->jsxDepth === 0) {
+                            $this->tokens[] = new Token(ord('>'), '>', $this->line);
+                            $this->position++;
                             echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
                             $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
                             $startPosition = $this->position;
-
                             $this->mode = self::MODE_PHP;
+                            continue;
                         }
                     }
                     $this->tokens[] = new Token(ord('>'), '>', $this->line);
@@ -340,8 +342,8 @@ class JSX extends Lexer {
             if ($this->mode === self::MODE_JSX_EXPR) {
                 if ($char === '}') {
                     echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
-                    $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
-                    $startPosition = $this->position;
+                    $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position + 1];
+                    $startPosition = $this->position + 1;
 
                     $this->mode = self::MODE_JSX;
                     $this->tokens[] = new Token(ord('}'), '}', $this->line);
