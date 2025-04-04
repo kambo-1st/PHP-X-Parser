@@ -94,21 +94,38 @@ class JSX extends Lexer {
         $this->closingModeInfo = [];
         
         // Second run: generate tokens
-        return $this->_tokenize(false);
+        $tokens = $this->_tokenize(false);
+
+
+        $tokens[] = new Token(0, '', $this->line);
+
+
+        return $tokens;
     }
     
     /**
-     * Internal tokenization logic that can operate in two modes.
+     * Internal tokenization logic that can operate in different modes.
      * 
      * @param bool $extractRangesOnly When true, only extracts mode ranges without generating tokens
-     * @return array Array of tokens (when $extractRangesOnly is false)
+     * @param array|null $specificRange Optional [mode, start, end] to tokenize a specific range
+     * @return array Array of tokens (when $extractRangesOnly is false) or range info (when $extractRangesOnly is true)
      */
-    private function _tokenize(bool $extractRangesOnly): array
+    private function _tokenize(bool $extractRangesOnly, ?array $specificRange = null): array
     {
         $startPosition = $this->position;
         error_log("Starting tokenization with mode: " . $this->mode . ", depth: " . $this->jsxDepth);
+        
+        // If a specific range is provided, adjust the mode and position
+        if ($specificRange !== null && !$extractRangesOnly) {
+            list($specificMode, $startPos, $endPos) = $specificRange;
+            $this->mode = $specificMode;
+            $this->position = $startPos;
+            $endPosition = $endPos;
+        } else {
+            $endPosition = strlen($this->code);
+        }
 
-        while ($this->position < strlen($this->code)) {
+        while ($this->position < ($specificRange !== null ? $endPosition : strlen($this->code))) {
             $char = $this->code[$this->position];
             
             if ($this->mode === self::MODE_PHP) {
@@ -462,15 +479,20 @@ class JSX extends Lexer {
             }
         }
 
+        // If we were processing a specific range, exit with current tokens
+        if ($specificRange !== null && !$extractRangesOnly) {
+            return $this->tokens;
+        }
+
         // Emit any remaining text buffer
         if (!$extractRangesOnly && $this->textBuffer !== '') {
             $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
         }
 
         // Add EOF token
-        if (!$extractRangesOnly) {
+        /*if (!$extractRangesOnly) {
             $this->tokens[] = new Token(0, '', $this->line);
-        }
+        }*/
 
         echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
         $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
@@ -522,5 +544,28 @@ class JSX extends Lexer {
     public function getClosingModeInfo(): array
     {
         return $this->closingModeInfo;
+    }
+
+    /**
+     * Tokenizes a specific range with the given mode.
+     * 
+     * @param int $mode The mode to use for tokenization (MODE_PHP, MODE_JSX, MODE_JSX_EXPR)
+     * @param int $start The start position in the code
+     * @param int $end The end position in the code
+     * @return array Array of tokens for the specific range
+     */
+    public function tokenizeRange(int $mode, int $start, int $end): array
+    {
+        // Reset state for tokenizing specific range
+        $this->position = 0;
+        $this->tokens = [];
+        $this->jsxDepth = 0;
+        $this->inJSXText = false;
+        $this->textBuffer = '';
+        $this->line = 1;
+        $this->closingModeInfo = [];
+        
+        // Tokenize the specific range with the provided mode
+        return $this->_tokenize(false, [$mode, $start, $end]);
     }
 } 
