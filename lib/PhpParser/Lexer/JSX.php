@@ -72,6 +72,11 @@ class JSX extends Lexer {
     public function tokenize(string $code, ?ErrorHandler $errorHandler = null): array
     {
         $this->code = $code;
+        
+        // First run: extract ranges
+        $this->_tokenize(true);
+        
+        // Reset state for second run
         $this->position = 0;
         $this->tokens = [];
         $this->mode = self::MODE_PHP;
@@ -79,8 +84,19 @@ class JSX extends Lexer {
         $this->inJSXText = false;
         $this->textBuffer = '';
         $this->line = 1;
-        $this->closingModeInfo = [];
-
+        
+        // Second run: generate tokens
+        return $this->_tokenize(false);
+    }
+    
+    /**
+     * Internal tokenization logic that can operate in two modes.
+     * 
+     * @param bool $extractRangesOnly When true, only extracts mode ranges without generating tokens
+     * @return array Array of tokens (when $extractRangesOnly is false)
+     */
+    private function _tokenize(bool $extractRangesOnly): array
+    {
         $startPosition = $this->position;
         error_log("Starting tokenization with mode: " . $this->mode . ", depth: " . $this->jsxDepth);
 
@@ -90,7 +106,9 @@ class JSX extends Lexer {
             if ($this->mode === self::MODE_PHP) {
                 // Handle PHP opening tag
                 if (substr($this->code, $this->position, 5) === '<?php') {
-                    $this->tokens[] = new Token(T_OPEN_TAG, '<?php', $this->line);
+                    if (!$extractRangesOnly) {
+                        $this->tokens[] = new Token(T_OPEN_TAG, '<?php', $this->line);
+                    }
                     $this->position += 5;
                     continue;
                 }
@@ -98,21 +116,32 @@ class JSX extends Lexer {
                 if ($char === '<' && $this->isJSXStart()) {
                     error_log("Entering JSX mode at position " . $this->position . ", depth: " . $this->jsxDepth);
 
+                    if (!$extractRangesOnly) {
+                        if ($this->textBuffer !== '') {
+                            $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
+                            $this->textBuffer = '';
+                        }
+                    }
+                    
                     echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
                     $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
                     $startPosition = $this->position;
 
-                    if ($this->textBuffer !== '') {
-                        $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
-                        $this->textBuffer = '';
-                    }
                     $this->mode = self::MODE_JSX;
                     $this->jsxDepth++;
                     $this->inJSXText = false;
-                    $this->tokens[] = new Token(ord('<'), '<', $this->line);
+                    
+                    if (!$extractRangesOnly) {
+                        $this->tokens[] = new Token(ord('<'), '<', $this->line);
+                    }
+                    
                     $this->position++;
                     $tagName = $this->consumeJSXTagName();
-                    $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
+                    
+                    if (!$extractRangesOnly) {
+                        $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
+                    }
+                    
                     continue;
                 }
 
@@ -124,20 +153,24 @@ class JSX extends Lexer {
                         $varName .= $this->code[$this->position];
                         $this->position++;
                     }
-                    if (!empty($varName)) {
+                    if (!empty($varName) && !$extractRangesOnly) {
                         $this->tokens[] = new Token(T_VARIABLE, '$' . $varName, $this->line);
                     }
                     continue;
                 }
 
                 if ($char === '=') {
-                    $this->tokens[] = new Token(ord('='), '=', $this->line);
+                    if (!$extractRangesOnly) {
+                        $this->tokens[] = new Token(ord('='), '=', $this->line);
+                    }
                     $this->position++;
                     continue;
                 }
 
                 if ($char === ';') {
-                    $this->tokens[] = new Token(ord(';'), ';', $this->line);
+                    if (!$extractRangesOnly) {
+                        $this->tokens[] = new Token(ord(';'), ';', $this->line);
+                    }
                     $this->position++;
                     continue;
                 }
@@ -156,7 +189,7 @@ class JSX extends Lexer {
 
             if ($this->mode === self::MODE_JSX) {
                 if ($char === '{') {
-                    if ($this->textBuffer !== '') {
+                    if (!$extractRangesOnly && $this->textBuffer !== '') {
                         $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
                         $this->textBuffer = '';
                     }
@@ -171,18 +204,20 @@ class JSX extends Lexer {
                         $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position-1];
                         $startPosition = $this->position-1;
 
-                        $this->tokens[] = new Token(ord('.'), '.', $this->line);
-                        $this->tokens[] = new Token(ord('.'), '.', $this->line);
-                        $this->tokens[] = new Token(ord('.'), '.', $this->line);
+                        if (!$extractRangesOnly) {
+                            $this->tokens[] = new Token(ord('.'), '.', $this->line);
+                            $this->tokens[] = new Token(ord('.'), '.', $this->line);
+                            $this->tokens[] = new Token(ord('.'), '.', $this->line);
+                        }
+                        
                         $this->position += 4;
                         $this->mode = self::MODE_JSX_EXPR;
-
-
-
                         continue;
                     }
 
-                    $this->tokens[] = new Token(ord('{'), '{', $this->line);
+                    if (!$extractRangesOnly) {
+                        $this->tokens[] = new Token(ord('{'), '{', $this->line);
+                    }
 
                     echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
                     $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position-1];
@@ -194,7 +229,7 @@ class JSX extends Lexer {
                 }
 
                 if ($char === '<') {
-                    if ($this->textBuffer !== '') {
+                    if (!$extractRangesOnly && $this->textBuffer !== '') {
                         $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
                         $this->textBuffer = '';
                     }
@@ -202,8 +237,12 @@ class JSX extends Lexer {
                     // Check for closing tag
                     if ($this->position + 1 < strlen($this->code) && $this->code[$this->position + 1] === '/') {
                         error_log("Found closing tag at position " . $this->position . ", depth: " . $this->jsxDepth);
-                        $this->tokens[] = new Token(ord('<'), '<', $this->line);
-                        $this->tokens[] = new Token(ord('/'), '/', $this->line);
+                        
+                        if (!$extractRangesOnly) {
+                            $this->tokens[] = new Token(ord('<'), '<', $this->line);
+                            $this->tokens[] = new Token(ord('/'), '/', $this->line);
+                        }
+                        
                         $this->position += 2;
 
                         // Get the closing tag name
@@ -212,7 +251,8 @@ class JSX extends Lexer {
                             $tagName .= $this->code[$this->position];
                             $this->position++;
                         }
-                        if (!empty($tagName)) {
+                        
+                        if (!empty($tagName) && !$extractRangesOnly) {
                             $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
                         }
 
@@ -222,7 +262,10 @@ class JSX extends Lexer {
                             $this->position++;
                         }
                         if ($this->position < strlen($this->code) && $this->code[$this->position] === '>') {
-                            $this->tokens[] = new Token(ord('>'), '>', $this->line);
+                            if (!$extractRangesOnly) {
+                                $this->tokens[] = new Token(ord('>'), '>', $this->line);
+                            }
+                            
                             $this->jsxDepth--;
                             if ($this->jsxDepth === 0) {
                                 echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
@@ -237,22 +280,35 @@ class JSX extends Lexer {
                     }
 
                     // Handle opening tag
-                    $this->tokens[] = new Token(ord('<'), '<', $this->line);
+                    if (!$extractRangesOnly) {
+                        $this->tokens[] = new Token(ord('<'), '<', $this->line);
+                    }
+                    
                     $this->position++;
                     $this->jsxDepth++;
                     $tagName = $this->consumeJSXTagName();
-                    $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
+                    
+                    if (!$extractRangesOnly) {
+                        $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
+                    }
+                    
                     continue;
                 }
 
                 if ($char === '>' || ($char === '/' && $this->position + 1 < strlen($this->code) && $this->code[$this->position + 1] === '>')) {
                     error_log("Found closing bracket at position " . $this->position . ", depth: " . $this->jsxDepth . ", inJSXText: " . ($this->inJSXText ? "true" : "false"));
                     if ($char === '/') {
-                        $this->tokens[] = new Token(ord('/'), '/', $this->line);
+                        if (!$extractRangesOnly) {
+                            $this->tokens[] = new Token(ord('/'), '/', $this->line);
+                        }
+                        
                         $this->position++;
                         $this->jsxDepth--;
                         if ($this->jsxDepth === 0) {
-                            $this->tokens[] = new Token(ord('>'), '>', $this->line);
+                            if (!$extractRangesOnly) {
+                                $this->tokens[] = new Token(ord('>'), '>', $this->line);
+                            }
+                            
                             $this->position++;
                             echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
                             $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
@@ -261,7 +317,11 @@ class JSX extends Lexer {
                             continue;
                         }
                     }
-                    $this->tokens[] = new Token(ord('>'), '>', $this->line);
+                    
+                    if (!$extractRangesOnly) {
+                        $this->tokens[] = new Token(ord('>'), '>', $this->line);
+                    }
+                    
                     $this->position++;
                     if ($char !== '/') {
                         $this->inJSXText = true;
@@ -285,7 +345,8 @@ class JSX extends Lexer {
                         $attrName .= $this->code[$this->position];
                         $this->position++;
                     }
-                    if (!empty($attrName)) {
+                    
+                    if (!empty($attrName) && !$extractRangesOnly) {
                         $this->tokens[] = new Token(T_STRING, $attrName, $this->line);
                     }
 
@@ -296,7 +357,10 @@ class JSX extends Lexer {
                     }
 
                     if ($this->position < strlen($this->code) && $this->code[$this->position] === '=') {
-                        $this->tokens[] = new Token(ord('='), '=', $this->line);
+                        if (!$extractRangesOnly) {
+                            $this->tokens[] = new Token(ord('='), '=', $this->line);
+                        }
+                        
                         $this->position++;
 
                         // Skip whitespace
@@ -306,7 +370,10 @@ class JSX extends Lexer {
                         }
 
                         if ($this->code[$this->position] === '{') {
-                            $this->tokens[] = new Token(ord('{'), '{', $this->line);
+                            if (!$extractRangesOnly) {
+                                $this->tokens[] = new Token(ord('{'), '{', $this->line);
+                            }
+                            
                             echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
                             $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
                             $startPosition = $this->position;
@@ -320,7 +387,11 @@ class JSX extends Lexer {
                                 $value .= $this->code[$this->position];
                                 $this->position++;
                             }
-                            $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $value, $this->line);
+                            
+                            if (!$extractRangesOnly) {
+                                $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $value, $this->line);
+                            }
+                            
                             $this->position++;
                         }
                     }
@@ -346,7 +417,11 @@ class JSX extends Lexer {
                     $startPosition = $this->position + 1;
 
                     $this->mode = self::MODE_JSX;
-                    $this->tokens[] = new Token(ord('}'), '}', $this->line);
+                    
+                    if (!$extractRangesOnly) {
+                        $this->tokens[] = new Token(ord('}'), '}', $this->line);
+                    }
+                    
                     $this->position++;
                     continue;
                 }
@@ -358,9 +433,11 @@ class JSX extends Lexer {
                         $varName .= $this->code[$this->position];
                         $this->position++;
                     }
-                    if (!empty($varName)) {
+                    
+                    if (!empty($varName) && !$extractRangesOnly) {
                         $this->tokens[] = new Token(T_VARIABLE, '$' . $varName, $this->line);
                     }
+                    
                     continue;
                 }
 
@@ -378,23 +455,25 @@ class JSX extends Lexer {
         }
 
         // Emit any remaining text buffer
-        if ($this->textBuffer !== '') {
+        if (!$extractRangesOnly && $this->textBuffer !== '') {
             $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
         }
 
         // Add EOF token
-        $this->tokens[] = new Token(0, '', $this->line);
+        if (!$extractRangesOnly) {
+            $this->tokens[] = new Token(0, '', $this->line);
+        }
 
         echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
         $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
 
-
-
-        $code = '';
-        foreach ($this->closingModeInfo as $info) {
-            $code .= "\n BLOCK of type ".$info[0].":".substr($this->code, $info[1], $info[2] - $info[1])."\n";
+        if (!$extractRangesOnly) {
+            $code = '';
+            foreach ($this->closingModeInfo as $info) {
+                $code .= "\n BLOCK of type ".$info[0].":".substr($this->code, $info[1], $info[2] - $info[1])."\n";
+            }
+            echo "Code: " . $code;
         }
-        echo "Code: " . $code;
 
         return $this->tokens;
     }
