@@ -72,9 +72,16 @@ class JSX extends Lexer {
     public function tokenize(string $code, ?ErrorHandler $errorHandler = null): array
     {
         $this->code = $code;
+        $this->closingModeInfo = [];
         
         // First run: extract ranges
-        $this->_tokenize(true);
+        $rangeInfo = $this->_tokenize(true);
+        
+        // Print the range information
+        echo "Range Information:\n";
+        foreach ($rangeInfo as $info) {
+            echo "Mode: " . $info[0] . ", Start: " . $info[1] . ", End: " . $info[2] . "\n";
+        }
         
         // Reset state for second run
         $this->position = 0;
@@ -84,6 +91,7 @@ class JSX extends Lexer {
         $this->inJSXText = false;
         $this->textBuffer = '';
         $this->line = 1;
+        $this->closingModeInfo = [];
         
         // Second run: generate tokens
         return $this->_tokenize(false);
@@ -473,9 +481,12 @@ class JSX extends Lexer {
                 $code .= "\n BLOCK of type ".$info[0].":".substr($this->code, $info[1], $info[2] - $info[1])."\n";
             }
             echo "Code: " . $code;
+            
+            return $this->tokens;
+        } else {
+            // Return the range information when extracting ranges
+            return $this->closingModeInfo;
         }
-
-        return $this->tokens;
     }
 
     private function isJSXStart(): bool
