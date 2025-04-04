@@ -46,6 +46,9 @@ class JSX extends Lexer {
     /** @var int */
     private $line = 1;
 
+    /** @var array */
+    private $closingModeInfo = [];
+
     /**
      * Creates a Lexer.
      *
@@ -76,7 +79,9 @@ class JSX extends Lexer {
         $this->inJSXText = false;
         $this->textBuffer = '';
         $this->line = 1;
+        $this->closingModeInfo = [];
 
+        $startPosition = $this->position;
         error_log("Starting tokenization with mode: " . $this->mode . ", depth: " . $this->jsxDepth);
 
         while ($this->position < strlen($this->code)) {
@@ -92,6 +97,11 @@ class JSX extends Lexer {
 
                 if ($char === '<' && $this->isJSXStart()) {
                     error_log("Entering JSX mode at position " . $this->position . ", depth: " . $this->jsxDepth);
+
+                    echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
+                    $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
+                    $startPosition = $this->position;
+
                     if ($this->textBuffer !== '') {
                         $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
                         $this->textBuffer = '';
@@ -156,15 +166,28 @@ class JSX extends Lexer {
                         $this->code[$this->position + 1] === '.' &&
                         $this->code[$this->position + 2] === '.' &&
                         $this->code[$this->position + 3] === '.') {
+
+                        echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
+                        $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position-1];
+                        $startPosition = $this->position-1;
+
                         $this->tokens[] = new Token(ord('.'), '.', $this->line);
                         $this->tokens[] = new Token(ord('.'), '.', $this->line);
                         $this->tokens[] = new Token(ord('.'), '.', $this->line);
                         $this->position += 4;
                         $this->mode = self::MODE_JSX_EXPR;
+
+
+
                         continue;
                     }
 
                     $this->tokens[] = new Token(ord('{'), '{', $this->line);
+
+                    echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
+                    $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position-1];
+                    $startPosition = $this->position-1;
+
                     $this->mode = self::MODE_JSX_EXPR;
                     $this->position++;
                     continue;
@@ -202,6 +225,10 @@ class JSX extends Lexer {
                             $this->tokens[] = new Token(ord('>'), '>', $this->line);
                             $this->jsxDepth--;
                             if ($this->jsxDepth === 0) {
+                                echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
+                                $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position+1];
+                                $startPosition = $this->position+1;
+
                                 $this->mode = self::MODE_PHP;
                             }
                             $this->position++;
@@ -225,6 +252,10 @@ class JSX extends Lexer {
                         $this->position++;
                         $this->jsxDepth--;
                         if ($this->jsxDepth === 0) {
+                            echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
+                            $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
+                            $startPosition = $this->position;
+
                             $this->mode = self::MODE_PHP;
                         }
                     }
@@ -274,6 +305,10 @@ class JSX extends Lexer {
 
                         if ($this->code[$this->position] === '{') {
                             $this->tokens[] = new Token(ord('{'), '{', $this->line);
+                            echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
+                            $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
+                            $startPosition = $this->position;
+
                             $this->mode = self::MODE_JSX_EXPR;
                             $this->position++;
                         } else if ($this->code[$this->position] === '"') {
@@ -304,6 +339,10 @@ class JSX extends Lexer {
 
             if ($this->mode === self::MODE_JSX_EXPR) {
                 if ($char === '}') {
+                    echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
+                    $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
+                    $startPosition = $this->position;
+
                     $this->mode = self::MODE_JSX;
                     $this->tokens[] = new Token(ord('}'), '}', $this->line);
                     $this->position++;
@@ -344,6 +383,17 @@ class JSX extends Lexer {
         // Add EOF token
         $this->tokens[] = new Token(0, '', $this->line);
 
+        echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
+        $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
+
+
+
+        $code = '';
+        foreach ($this->closingModeInfo as $info) {
+            $code .= "\n BLOCK of type ".$info[0].":".substr($this->code, $info[1], $info[2] - $info[1])."\n";
+        }
+        echo "Code: " . $code;
+
         return $this->tokens;
     }
 
@@ -369,5 +419,16 @@ class JSX extends Lexer {
         }
 
         return $tagName;
+    }
+    
+    /**
+     * Returns the collected closing mode information.
+     * Each entry is an array with structure [mode, startPosition, endPosition].
+     *
+     * @return array The collected closing mode information
+     */
+    public function getClosingModeInfo(): array
+    {
+        return $this->closingModeInfo;
     }
 } 
