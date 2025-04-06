@@ -270,4 +270,37 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         
         $this->assertEquals('div', $jsxElement->closingName);
     }
+
+    // $element9 = <div>{ $isLoggedIn ? <span>Welcome</span> : <a href="/login">Login</a> }</div>;
+
+    public function testParseJSXElementWithConditionalRendering() {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <div>{ $isLoggedIn ? <span>Welcome</span> : <a href="/login">Login</a> }</div>;
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('div', $jsxElement->name);
+        $this->assertCount(1, $jsxElement->children);
+
+        $this->assertInstanceOf(ExpressionContainer::class, $jsxElement->children[0]);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\BinaryOp\Coalesce::class, $jsxElement->children[0]->expression);
+
+        $coalesce = $jsxElement->children[0]->expression;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\BinaryOp\Coalesce::class, $coalesce);
+
+        $this->assertInstanceOf(\PhpParser\Node\Expr\BinaryOp\Coalesce::class, $coalesce);
+
+        $coalesce = $jsxElement->children[0]->expression;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\BinaryOp\Coalesce::class, $coalesce);
+
+    }
 }

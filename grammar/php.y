@@ -1435,6 +1435,8 @@ jsx_element:
           { $$ = Node\JSX\Element[$2, $3, $5, $8]; }
     | '<' T_STRING jsx_attributes '/' '>'
           { $$ = Node\JSX\Element[$2, $3, [], null]; }
+    | '<' T_STRING '>' jsx_children '<' '/' T_STRING '>'
+          { $$ = Node\JSX\Element[$2, [], $4, $7]; }
 ;
 
 jsx_attributes:
@@ -1450,19 +1452,27 @@ jsx_attribute:
 
 jsx_attribute_value:
       T_CONSTANT_ENCAPSED_STRING                           { $$ = Scalar\String_[$1]; }
-    | '{' expr '}'                                         { $$ = $2; }
+    | '{' jsx_expr '}'                                     { $$ = $2; }
     | T_STRING                                             { $$ = Scalar\String_[$1]; }
 ;
 
 jsx_children:
       /* empty */                                           { $$ = []; }
     | jsx_children jsx_child                                { push($1, $2); }
+    | jsx_children '{' jsx_expr '}'                        { push($1, Node\JSX\ExpressionContainer[$3]); }
 ;
 
 jsx_child:
       T_CONSTANT_ENCAPSED_STRING                           { $$ = Node\JSX\Text[$1]; }
-    | '{' expr '}'                                         { $$ = Node\JSX\ExpressionContainer[$2]; }
     | jsx_element                                          { $$ = $1; }
+    | '{' jsx_expr '}'                                     { $$ = Node\JSX\ExpressionContainer[$2]; }
+;
+
+jsx_expr:
+      expr                                                  { $$ = $1; }
+    | jsx_element                                          { $$ = $1; }
+    | expr '?' jsx_expr ':' jsx_expr                       { $$ = Expr\Ternary[$1, $3, $5]; }
+    | expr '?' ':' jsx_expr                                { $$ = Expr\Ternary[$1, null, $4]; }
 ;
 
 %%
