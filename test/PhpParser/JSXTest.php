@@ -342,4 +342,39 @@ $element11 = <>
         $this->assertEquals('div', $jsxElement->children[1]->name);
         $this->assertEquals('Part B', $jsxElement->children[1]->children[0]->value);
     }
+
+    // $element10 = <div>{ $hasNotifications && <span>You have new messages</span> }</div>;
+
+    public function testParseJSXElementWithConditionalAndRendering() {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <div>{$hasNotifications && <span>You have new messages</span>}</div>;
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('div', $jsxElement->name);
+
+        $this->assertCount(1, $jsxElement->children);
+
+        $this->assertInstanceOf(ExpressionContainer::class, $jsxElement->children[0]);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\BinaryOp\BooleanAnd::class, $jsxElement->children[0]->expression);
+        
+        $booleanAnd = $jsxElement->children[0]->expression;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $booleanAnd->left);
+        $this->assertEquals('hasNotifications', $booleanAnd->left->name);
+        
+        $this->assertInstanceOf(Element::class, $booleanAnd->right);
+        $this->assertEquals('span', $booleanAnd->right->name);
+        $this->assertCount(1, $booleanAnd->right->children);
+        $this->assertInstanceOf(Text::class, $booleanAnd->right->children[0]);
+        $this->assertEquals('You have new messages', $booleanAnd->right->children[0]->value);
+    }
 }
