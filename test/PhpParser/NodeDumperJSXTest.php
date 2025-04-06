@@ -285,7 +285,9 @@ array(
                     )
                     2: JSX_Attribute[2 - 2](
                         name: disabled
-                        value: null
+                        value: Scalar_String(
+                            value: true
+                        )
                     )
                 )
                 children: array(

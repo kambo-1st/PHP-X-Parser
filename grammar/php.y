@@ -1444,13 +1444,14 @@ jsx_attributes:
 
 jsx_attribute:
       T_STRING '=' jsx_attribute_value                      { $$ = Node\JSX\Attribute[$1, $3]; }
-    | T_STRING                                              { $$ = Node\JSX\Attribute[$1, null]; }
+    | T_STRING                                              { $$ = Node\JSX\Attribute[$1, new Scalar\String_('true')]; }
     | '.' '.' '.' expr '}'                                  { $$ = Node\JSX\SpreadAttribute[$4]; }
 ;
 
 jsx_attribute_value:
       T_CONSTANT_ENCAPSED_STRING                           { $$ = Scalar\String_[$1]; }
     | '{' expr '}'                                         { $$ = $2; }
+    | T_STRING                                             { $$ = Scalar\String_[$1]; }
 ;
 
 jsx_children:

@@ -176,6 +176,18 @@ missing opening brace for spread attribute!!!
                             $i++;
                         }
                         
+                        // Check for closing tag after attribute
+                        if ($i < $len && 
+                            (($phpTokens[$i]->id === self::T_SLASH && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_GT) ||
+                             $phpTokens[$i]->id === self::T_GT)) {
+                            // This was a boolean attribute, emit null value
+                            if ($phpTokens[$i]->id === self::T_SLASH) {
+                                $tokens[] = new Token(self::T_SLASH, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                $i++;
+                            }
+                            break;
+                        }
+                        
                         if ($i < $len && $phpTokens[$i]->id === self::T_EQUAL) {
                             $tokens[] = new Token(self::T_EQUAL, $phpTokens[$i]->text, $phpTokens[$i]->line);
                             $i++;
