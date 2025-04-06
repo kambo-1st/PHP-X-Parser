@@ -220,6 +220,20 @@ missing opening brace for spread attribute!!!
                             $content .= ' ';
                             $lastWasSpace = true;
                         }
+                    } else if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
+                        // Handle JSX expression
+                        $tokens[] = new Token(self::T_CURLY_OPEN, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                        $i++;
+                        
+                        // Get expression content
+                        while ($i < $len && $phpTokens[$i]->id !== self::T_CURLY_CLOSE) {
+                            $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            $i++;
+                        }
+                        
+                        if ($i < $len) {
+                            $tokens[] = new Token(self::T_CURLY_CLOSE, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                        }
                     } else {
                         $content .= $phpTokens[$i]->text;
                         $lastWasSpace = false;
@@ -269,7 +283,7 @@ missing opening brace for spread attribute!!!
         
         // Add EOF token with correct line number
         $tokens[] = new Token(self::T_EOF, '', $this->line + 1);
-        var_dump($tokens);
+        //var_dump($tokens);
         return $tokens;
     }
     
