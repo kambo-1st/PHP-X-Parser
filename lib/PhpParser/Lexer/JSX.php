@@ -125,6 +125,13 @@ class JSX extends Lexer {
                         continue;
                     }
                     
+                    // Check for self-closing tag
+                    if ($phpTokens[$i]->id === self::T_SLASH && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_GT) {
+                        $tokens[] = new Token(self::T_SLASH, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                        $i++;
+                        break;
+                    }
+                    
                     // Handle spread attributes (...$props)
                     if ($phpTokens[$i]->id === T_ELLIPSIS) {
                         // Expand ... into three dots
@@ -214,36 +221,68 @@ missing opening brace for spread attribute!!!
                 $i++;
                 $content = '';
                 $lastWasSpace = false;
-                while ($i < $len && !($phpTokens[$i]->id === self::T_LT && $phpTokens[$i + 1]->id === self::T_SLASH)) {
-                    if ($phpTokens[$i]->id === T_WHITESPACE) {
-                        if (!$lastWasSpace) {
-                            $content .= ' ';
-                            $lastWasSpace = true;
-                        }
-                    } else if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
-                        // Handle JSX expression
-                        $tokens[] = new Token(self::T_CURLY_OPEN, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                
+                // Skip content processing if it's a self-closing tag
+                if (end($tokens)->id === self::T_SLASH) {
+                    // We've already processed the slash, just need to handle the closing >
+                    if ($i < $len && $phpTokens[$i]->id === self::T_GT) {
+                        $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
                         $i++;
-                        
-                        // Get expression content
-                        while ($i < $len && $phpTokens[$i]->id !== self::T_CURLY_CLOSE) {
-                            $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
-                            $i++;
-                        }
-                        
-                        if ($i < $len) {
-                            $tokens[] = new Token(self::T_CURLY_CLOSE, $phpTokens[$i]->text, $phpTokens[$i]->line);
-                        }
-                    } else {
-                        $content .= $phpTokens[$i]->text;
-                        $lastWasSpace = false;
                     }
-                    $i++;
+                } else {
+                    while ($i < $len && !($phpTokens[$i]->id === self::T_LT && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_SLASH)) {
+                        if ($phpTokens[$i]->id === T_WHITESPACE) {
+                            if (!$lastWasSpace) {
+                                $content .= ' ';
+                                $lastWasSpace = true;
+                            }
+                        } else if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
+                            // Handle JSX expression
+                            if (!empty($content)) {
+                                $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
+                                $content = '';
+                            }
+                            $tokens[] = new Token(self::T_CURLY_OPEN, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            $i++;
+                            
+                            // Get expression content
+                            while ($i < $len && $phpTokens[$i]->id !== self::T_CURLY_CLOSE) {
+                                $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                $i++;
+                            }
+                            
+                            if ($i < $len) {
+                                $tokens[] = new Token(self::T_CURLY_CLOSE, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            }
+                        } else if ($phpTokens[$i]->id === self::T_SEMICOLON) {
+                            // Handle semicolon separately
+                            if (!empty($content)) {
+                                $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
+                                $content = '';
+                            }
+                            $tokens[] = new Token(self::T_SEMICOLON, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            $lastWasSpace = false;
+                        } else {
+                            $content .= $phpTokens[$i]->text;
+                            $lastWasSpace = false;
+                        }
+                        $i++;
+                    }
                 }
                 
-                if (!empty($content)) {
-                    $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
+                // Add any remaining content, but only if it's not just whitespace
+                if (!empty(trim($content))) {
+                    $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i - 1]->line);
                 }
+                
+                // Debug output before closing tag handling
+                echo "Before closing tag - Current i: $i, len: $len\n";
+                echo "Current token: " . ($i < $len ? $phpTokens[$i]->id : 'EOF') . "\n";
+                echo "Tokens so far:\n";
+                foreach ($tokens as $token) {
+                    echo "  - " . $token->id . ": " . $token->text . "\n";
+                }
+                echo "\n";
                 
                 // Handle closing tag
                 if ($i < $len && $phpTokens[$i]->id === self::T_LT) {
