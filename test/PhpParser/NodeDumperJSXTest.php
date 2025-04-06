@@ -261,8 +261,7 @@ array(
     )
 )
 OUT;
-        // TODO fix me...
-        //$this->assertSame($this->canonicalize($expected3), $this->canonicalize($dump));
+        $this->assertSame($this->canonicalize($expected3), $this->canonicalize($dump));
 
         // Test case 4: Self-closing JSX with multiple attributes
         $code4 = "<?php\n\$element = <input type=\"text\" value={\$value} disabled />;";
@@ -305,5 +304,194 @@ array(
 )
 OUT;
         $this->assertSame($this->canonicalize($expected4), $this->canonicalize($dump));
+    }
+
+    public function testDumpJSXWithClassProperty(): void {
+        $lexer = new Lexer\JSX([
+            'usedAttributes' => [
+                'comments',
+                'startLine',
+                'endLine'
+            ],
+        ]);
+        $parser = new Parser\Php7($lexer);
+        $traverser = new NodeTraverser();
+        $traverser->addVisitor(new NodeVisitor\JSXTransformer());
+        $dumper = new NodeDumper(['dumpPositions' => true]);
+
+        $code = "<?php\nclass App extends Component {\n    private \$foo = '<div>Hi</div>';\n\n    public function render() {\n        return (\n            <div>{\$this->foo}</div>\n        );\n    }\n}";
+        $stmts = $parser->parse($code);
+        $stmts = $traverser->traverse($stmts);
+        $dump = $dumper->dump($stmts);
+        $expected = <<<'OUT'
+array(
+    0: Stmt_Expression[3 - 7](
+        expr: Expr_Assign[3 - 3](
+            var: Expr_Variable[3 - 3](
+                name: foo
+            )
+            expr: JSX_Element[3 - 3](
+                name: div
+                jsxAttributes: array(
+                )
+                children: array(
+                    0: JSX_Text[3 - 3](
+                        value: Hi
+                    )
+                )
+                closingName: div
+            )
+        )
+    )
+    1: JSX_Element[7 - 8](
+        name: div
+        jsxAttributes: array(
+        )
+        children: array(
+            0: JSX_ExpressionContainer[7 - 7](
+                expression: Expr_Variable[7 - 7](
+                    name: this
+                )
+            )
+        )
+        closingName: div
+    )
+)
+OUT;
+        $this->assertSame($this->canonicalize($expected), $this->canonicalize($dump));
+    }
+
+    public function testDumpJSXInClassDefinition(): void {
+        $lexer = new Lexer\JSX([
+            'usedAttributes' => ['startLine', 'endLine']
+        ]);
+        $parser = new Parser\Php7($lexer);
+        $traverser = new NodeTraverser();
+        $traverser->addVisitor(new NodeVisitor\JSXTransformer());
+        $dumper = new NodeDumper(['dumpPositions' => true]);
+
+        $code = "<?php\nclass App {\n    public function render() {\n        return <div>Hello</div>;\n    }\n}";
+        $stmts = $parser->parse($code);
+        $stmts = $traverser->traverse($stmts);
+        $dump = $dumper->dump($stmts);
+        $expected = <<<'OUT'
+array(
+    0: Stmt_Class[2 - 5](
+        name: App
+        extends: null
+        implements: array(
+        )
+        flags: 0
+        stmts: array(
+            0: Stmt_ClassMethod[3 - 5](
+                flags: MODIFIER_PUBLIC
+                name: render
+                params: array(
+                )
+                returnType: null
+                stmts: array(
+                    0: Stmt_Return[4 - 4](
+                        expr: JSX_Element[4 - 4](
+                            name: div
+                            jsxAttributes: array(
+                            )
+                            children: array(
+                                0: JSX_Text[4 - 4](
+                                    value: Hello
+                                )
+                            )
+                            closingName: div
+                        )
+                    )
+                )
+            )
+        )
+    )
+)
+OUT;
+        $this->assertSame($this->canonicalize($expected), $this->canonicalize($dump));
+    }
+
+    public function testDumpJSXWithPropertyAccess(): void {
+        $lexer = new Lexer\JSX([
+            'usedAttributes' => ['startLine', 'endLine']
+        ]);
+        $parser = new Parser\Php7($lexer);
+        $traverser = new NodeTraverser();
+        $traverser->addVisitor(new NodeVisitor\JSXTransformer());
+        $dumper = new NodeDumper(['dumpPositions' => true]);
+
+        $code = "<?php\n<div>{\$this->property}</div>;";
+        $stmts = $parser->parse($code);
+        $stmts = $traverser->traverse($stmts);
+        $dump = $dumper->dump($stmts);
+        $expected = <<<'OUT'
+array(
+    0: Stmt_Expression[2 - 2](
+        expr: JSX_Element[2 - 2](
+            name: div
+            jsxAttributes: array(
+            )
+            children: array(
+                0: JSX_ExpressionContainer[2 - 2](
+                    expression: Expr_PropertyFetch[2 - 2](
+                        var: Expr_Variable[2 - 2](
+                            name: this
+                        )
+                        name: property
+                    )
+                )
+            )
+            closingName: div
+        )
+    )
+)
+OUT;
+        $this->assertSame($this->canonicalize($expected), $this->canonicalize($dump));
+    }
+
+    public function testDumpJSXWithHTMLStringProperty(): void {
+        $lexer = new Lexer\JSX([
+            'usedAttributes' => ['startLine', 'endLine']
+        ]);
+        $parser = new Parser\Php7($lexer);
+        $traverser = new NodeTraverser();
+        $traverser->addVisitor(new NodeVisitor\JSXTransformer());
+        $dumper = new NodeDumper(['dumpPositions' => true]);
+
+        $code = "<?php\n\$html = '<div>Test</div>';\n<div>{\$html}</div>;";
+        $stmts = $parser->parse($code);
+        $stmts = $traverser->traverse($stmts);
+        $dump = $dumper->dump($stmts);
+        $expected = <<<'OUT'
+array(
+    0: Stmt_Expression[2 - 2](
+        expr: Expr_Assign[2 - 2](
+            var: Expr_Variable[2 - 2](
+                name: html
+            )
+            expr: Scalar_String[2 - 2](
+                value: <div>Test</div>
+            )
+        )
+    )
+    1: Stmt_Expression[3 - 3](
+        expr: JSX_Element[3 - 3](
+            name: div
+            jsxAttributes: array(
+            )
+            children: array(
+                0: JSX_ExpressionContainer[3 - 3](
+                    expression: Expr_Variable[3 - 3](
+                        name: html
+                    )
+                )
+            )
+            closingName: div
+        )
+    )
+)
+OUT;
+        $this->assertSame($this->canonicalize($expected), $this->canonicalize($dump));
     }
 } 
