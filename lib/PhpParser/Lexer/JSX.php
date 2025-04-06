@@ -255,7 +255,7 @@ class JSX extends Lexer {
                         // Check for nested JSX element
                         if ($phpTokens[$i]->id === self::T_LT && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_STRING) {
                             echo "DEBUG: Found nested JSX element in content\n";
-                            // Emit any accumulated content
+                            // Emit any accumulated content if it's not just whitespace
                             if (!empty(trim($content))) {
                                 $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
                                 $content = '';
@@ -399,7 +399,7 @@ class JSX extends Lexer {
                             }
                         } else if ($phpTokens[$i]->id === self::T_SEMICOLON) {
                             // Handle semicolon separately
-                            if (!empty($content)) {
+                            if (!empty(trim($content))) {
                                 $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
                                 $content = '';
                             }

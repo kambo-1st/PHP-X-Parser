@@ -289,18 +289,21 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         $jsxElement = $expr->expr;
         $this->assertInstanceOf(Element::class, $jsxElement);
         $this->assertEquals('div', $jsxElement->name);
+
+        var_dump($jsxElement->children);
+
         $this->assertCount(1, $jsxElement->children);
 
         $this->assertInstanceOf(ExpressionContainer::class, $jsxElement->children[0]);
-        $this->assertInstanceOf(\PhpParser\Node\Expr\BinaryOp\Coalesce::class, $jsxElement->children[0]->expression);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Ternary::class, $jsxElement->children[0]->expression);
 
-        $coalesce = $jsxElement->children[0]->expression;
-        $this->assertInstanceOf(\PhpParser\Node\Expr\BinaryOp\Coalesce::class, $coalesce);
-
-        $this->assertInstanceOf(\PhpParser\Node\Expr\BinaryOp\Coalesce::class, $coalesce);
-
-        $coalesce = $jsxElement->children[0]->expression;
-        $this->assertInstanceOf(\PhpParser\Node\Expr\BinaryOp\Coalesce::class, $coalesce);
-
+        $ternary = $jsxElement->children[0]->expression;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Ternary::class, $ternary);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $ternary->cond);
+        $this->assertEquals('isLoggedIn', $ternary->cond->name);
+        $this->assertInstanceOf(\PhpParser\Node\JSX\Element::class, $ternary->if);
+        $this->assertEquals('span', $ternary->if->name);
+        $this->assertInstanceOf(\PhpParser\Node\JSX\Element::class, $ternary->else);
+        $this->assertEquals('a', $ternary->else->name);
     }
 }
