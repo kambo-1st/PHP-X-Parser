@@ -1474,6 +1474,7 @@ jsx_child:
       T_CONSTANT_ENCAPSED_STRING                           { $$ = Node\JSX\Text[$1]; }
     | jsx_element                                          { $$ = $1; }
     | '{' jsx_expr '}'                                     { $$ = Node\JSX\ExpressionContainer[$2]; }
+    | '{' '/' '*' T_CONSTANT_ENCAPSED_STRING '*' '/' '}'   { $$ = Node\JSX\Comment[$4]; }
 ;
 
 jsx_expr:
@@ -1481,6 +1482,7 @@ jsx_expr:
     | jsx_element                                          { $$ = $1; }
     | expr '?' jsx_expr ':' jsx_expr                       { $$ = Expr\Ternary[$1, $3, $5]; }
     | expr '?' ':' jsx_expr                                { $$ = Expr\Ternary[$1, null, $4]; }
+    | '/' '*' T_CONSTANT_ENCAPSED_STRING '*' '/'           { $$ = Node\JSX\Comment[$3]; }
 ;
 
 %%

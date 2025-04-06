@@ -11,6 +11,7 @@ use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\JSXTransformer;
+use PhpParser\Node\Expr\Comment;
 
 class JSXTest extends \PHPUnit\Framework\TestCase
 {
@@ -376,5 +377,37 @@ $element11 = <>
         $this->assertCount(1, $booleanAnd->right->children);
         $this->assertInstanceOf(Text::class, $booleanAnd->right->children[0]);
         $this->assertEquals('You have new messages', $booleanAnd->right->children[0]->value);
+    }
+
+    public function testParseJSXElementWithComments() {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <div>
+            {/* This is a comment */}
+            <span>Visible</span>
+        </div>;
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+        
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('div', $jsxElement->name);
+
+        $this->assertCount(2, $jsxElement->children);
+
+        $this->assertInstanceOf(\PhpParser\Node\JSX\Comment::class, $jsxElement->children[0]);
+        $this->assertEquals(' This is a comment ', $jsxElement->children[0]->text);
+
+        $this->assertInstanceOf(Element::class, $jsxElement->children[1]);
+        $this->assertEquals('span', $jsxElement->children[1]->name);
+        $this->assertCount(1, $jsxElement->children[1]->children);
+        $this->assertInstanceOf(Text::class, $jsxElement->children[1]->children[0]);
+        $this->assertEquals('Visible', $jsxElement->children[1]->children[0]->value);
     }
 }

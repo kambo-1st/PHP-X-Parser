@@ -383,6 +383,14 @@ class JSX extends Lexer {
                                 $lastWasSpace = true;
                             }
                         } else if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
+                            // Check if this is a JSX comment
+                            if ($this->isJSXComment($phpTokens, $i)) {
+                                echo "DEBUG: Found JSX comment\n";
+                                $commentTokens = $this->processJSXComment($phpTokens, $i);
+                                $tokens = array_merge($tokens, $commentTokens);
+                                continue;
+                            }
+                            
                             echo "DEBUG: Found JSX expression in content, switching to JSX_EXPR mode\n";
                             $this->mode = self::MODE_JSX_EXPR;
                             $tokens[] = $phpTokens[$i];
@@ -394,6 +402,15 @@ class JSX extends Lexer {
                                 $token = $phpTokens[$i];
                                 echo "DEBUG: Processing expression token: " . $token->id . " (" . $token->text . ")\n";
                                 
+
+                                // Check if this is a JSX comment
+                                if ($this->isJSXComment($phpTokens, $i)) {
+                                    echo "DEBUG: Found JSX comment\n";
+                                    $commentTokens = $this->processJSXComment($phpTokens, $i);
+                                    $tokens = array_merge($tokens, $commentTokens);
+                                    continue;
+                                }
+
                                 // Track expression depth for nested expressions
                                 if ($token->id === self::T_CURLY_OPEN) {
                                     $exprDepth++;
@@ -561,6 +578,76 @@ class JSX extends Lexer {
                ctype_alpha($tokens[$next]->text[0]);
     }
 
+    private function isJSXComment(array $tokens, int $i): bool
+    {
+        if (!isset($tokens[$i])) {
+            return false;
+        }
+
+        // Check for PHP comment /* ... */
+        if ($tokens[$i]->id === 391) {
+            return true;
+        }
+        
+        // Check for JSX comment { /* ... */ }
+        if ($tokens[$i]->id === self::T_CURLY_OPEN) {
+            $next = $i + 1;
+            if (!isset($tokens[$next]) || $tokens[$next]->id !== self::T_SLASH) {
+                return false;
+            }
+            return true;
+        }
+        
+        return false;
+    }
+
+    private function processJSXComment(array $tokens, int &$i): array
+    {
+        $commentTokens = [];
+        
+        // Handle PHP comment /* ... */
+        if ($tokens[$i]->id === T_COMMENT) {
+            $commentContent = substr($tokens[$i]->text, 2, -2); // Remove /* and */
+            $commentTokens[] = new Token(self::T_SLASH, '/', $tokens[$i]->line);
+            $commentTokens[] = new Token(ord('*'), '*', $tokens[$i]->line);
+            $commentTokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $commentContent, $tokens[$i]->line);
+            $commentTokens[] = new Token(ord('*'), '*', $tokens[$i]->line);
+            $commentTokens[] = new Token(self::T_SLASH, '/', $tokens[$i]->line);
+            $i++;
+            return $commentTokens;
+        }
+        
+        // Handle JSX comment { /* ... */ }
+        $commentTokens[] = new Token(self::T_CURLY_OPEN, '{', $tokens[$i]->line);
+        $i++;
+        $commentTokens[] = new Token(self::T_SLASH, '/', $tokens[$i]->line);
+        $i++;
+        
+        // Collect comment content until we find */
+        $commentContent = '';
+        while ($i < count($tokens)) {
+            if ($tokens[$i]->id === self::T_SLASH && 
+                isset($tokens[$i + 1]) && 
+                $tokens[$i + 1]->id === self::T_CURLY_CLOSE) {
+                break;
+            }
+            $commentContent .= $tokens[$i]->text;
+            $i++;
+        }
+        
+        if (!empty($commentContent)) {
+            $commentTokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $commentContent, $tokens[$i]->line);
+        }
+        
+        if ($i < count($tokens)) {
+            $commentTokens[] = new Token(self::T_SLASH, '/', $tokens[$i]->line);
+            $i++;
+            $commentTokens[] = new Token(self::T_CURLY_CLOSE, '}', $tokens[$i]->line);
+            $i++;
+        }
+        
+        return $commentTokens;
+    }
 
     /**
      * Returns the collected closing mode information.

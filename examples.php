@@ -35,3 +35,12 @@ class App extends Component {
         );
     }
 }
+
+$element = <div>{$isLoggedIn ? <span>Welcome</span> : <a>Login</a>}</div>;
+
+$element11 = <>
+    <div>Part A</div>
+    <div>Part B</div>
+</>;
+
+$element = <div>{$hasNotifications && <span>You have new messages</span>}</div>;
