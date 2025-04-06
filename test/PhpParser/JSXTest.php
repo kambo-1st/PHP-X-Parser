@@ -203,4 +203,29 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         
         $this->assertEquals('div', $jsxElement->closingName);
     }
-} 
+
+    // class with property conating JSX, generate test
+    public function testParseClassWithJSXProperty() {
+        $stmts = $this->parseAndTransform('<?php
+        class MyComponent {
+            public $jsx = <div>Hello World</div>;
+        }
+        ');
+        
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Class_::class, $stmt);
+        
+        $property = $stmt->stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Property::class, $property);
+        $this->assertEquals('jsx', $property->props[0]->name->name);
+        $this->assertInstanceOf(Element::class, $property->props[0]->default);
+
+        $jsxElement = $property->props[0]->default;
+        $this->assertEquals('div', $jsxElement->name);
+        $this->assertCount(1, $jsxElement->children);
+        $this->assertInstanceOf(Text::class, $jsxElement->children[0]);
+        $this->assertEquals('Hello World', $jsxElement->children[0]->value);
+    }
+}
