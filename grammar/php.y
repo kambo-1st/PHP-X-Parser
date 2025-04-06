@@ -1437,6 +1437,14 @@ jsx_element:
           { $$ = Node\JSX\Element[$2, $3, [], null]; }
     | '<' T_STRING '>' jsx_children '<' '/' T_STRING '>'
           { $$ = Node\JSX\Element[$2, [], $4, $7]; }
+    | T_IS_NOT_EQUAL jsx_children '<' '/' '>'
+          { $$ = Node\JSX\Element['', [], $2, '']; }
+    | '<' '/' '>'
+          { $$ = Node\JSX\Element['', [], [], '']; }
+    | T_IS_NOT_EQUAL  jsx_children '<' '/' '>' %prec T_IS_NOT_EQUAL
+          { $$ = Node\JSX\Element['', [], $2, '']; }
+    | '<' '/' '>' %prec T_IS_NOT_EQUAL
+          { $$ = Node\JSX\Element['', [], [], '']; }
 ;
 
 jsx_attributes:

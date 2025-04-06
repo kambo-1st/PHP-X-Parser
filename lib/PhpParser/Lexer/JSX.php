@@ -547,10 +547,20 @@ class JSX extends Lexer {
     private function isJSXStart(array $tokens, int $i): bool
     {
         $next = $i + 1;
-        return isset($tokens[$next]) && 
-               $tokens[$next]->id === self::T_STRING &&
+        if (!isset($tokens[$next])) {
+            return false;
+        }
+        
+        // Check for JSX fragment
+        if ($tokens[$next]->id === self::T_GT) {
+            return true;
+        }
+        
+        // Check for regular JSX element
+        return $tokens[$next]->id === self::T_STRING &&
                ctype_alpha($tokens[$next]->text[0]);
     }
+
 
     /**
      * Returns the collected closing mode information.

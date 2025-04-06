@@ -306,4 +306,40 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         $this->assertInstanceOf(\PhpParser\Node\JSX\Element::class, $ternary->else);
         $this->assertEquals('a', $ternary->else->name);
     }
+/*
+$element11 = <>
+    <div>Part A</div>
+    <div>Part B</div>
+</>;
+
+*/
+    public function testParseJSXElementWithMultipleChildren() {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <>
+            <div>Part A</div>
+            <div>Part B</div>
+        </>;
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('', $jsxElement->name);
+        $this->assertCount(2, $jsxElement->children);
+
+        $this->assertInstanceOf(Element::class, $jsxElement->children[0]);
+        $this->assertEquals('div', $jsxElement->children[0]->name);
+        $this->assertEquals('Part A', $jsxElement->children[0]->children[0]->value);
+
+        $this->assertInstanceOf(Element::class, $jsxElement->children[1]);
+        $this->assertEquals('div', $jsxElement->children[1]->name);
+        $this->assertEquals('Part B', $jsxElement->children[1]->children[0]->value);
+    }
 }

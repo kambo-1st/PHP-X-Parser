@@ -1,0 +1,37 @@
+<?php
+
+// Basic JSX Examples
+
+// 1. Simple JSX Element
+$element1 = <div>Hello World</div>;
+
+// 2. JSX Element with Attributes
+$element2 = <div class="container" id={$id}>Hello World</div>;
+
+// 3. JSX Element with Spread Attributes
+$element3 = <div {...$props}>Hello World</div>;
+
+// 4. JSX Element with Expressions
+$element4 = <div>{$greeting}</div>;
+
+// 5. Self-closing JSX Element
+$element5 = <img src="image.jpg" />;
+
+// 6. JSX Element with Nested Elements
+$element6 = <div><span>World</span></div>;
+
+// Class Examples with JSX
+
+// 7. Class with JSX Property
+class MyComponent {
+    public $jsx = <div>Hello World</div>;
+}
+
+// 8. Class with JSX Return
+class App extends Component {
+    public function render() {
+        return (
+            <div>{$this->foo}</div>
+        );
+    }
+}
