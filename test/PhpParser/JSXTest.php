@@ -410,4 +410,47 @@ $element11 = <>
         $this->assertInstanceOf(Text::class, $jsxElement->children[1]->children[0]);
         $this->assertEquals('Visible', $jsxElement->children[1]->children[0]->value);
     }
+
+    // $element = <div style={["color" => "red", "fontSize" => "16px"]}>Styled</div>;
+
+    public function testParseJSXElementWithStyle() {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <div style={["color" => "red", "fontSize" => "16px"]}>Styled</div>;
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('div', $jsxElement->name);
+        
+        $this->assertCount(1, $jsxElement->jsxAttributes);
+
+        $this->assertInstanceOf(Attribute::class, $jsxElement->jsxAttributes[0]);
+        $this->assertEquals('style', $jsxElement->jsxAttributes[0]->name);
+ 
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Array_::class, $jsxElement->jsxAttributes[0]->value);
+
+        $array = $jsxElement->jsxAttributes[0]->value;
+        $this->assertCount(2, $array->items);
+        
+        $this->assertInstanceOf(\PhpParser\Node\ArrayItem::class, $array->items[0]);
+        $this->assertInstanceOf(\PhpParser\Node\ArrayItem::class, $array->items[1]);
+        
+        $this->assertInstanceOf(\PhpParser\Node\Scalar\String_::class, $array->items[0]->key);
+        $this->assertInstanceOf(\PhpParser\Node\Scalar\String_::class, $array->items[0]->value);
+        $this->assertEquals('color', $array->items[0]->key->value);
+        $this->assertEquals('red', $array->items[0]->value->value);
+        
+        $this->assertInstanceOf(\PhpParser\Node\Scalar\String_::class, $array->items[1]->key);
+        $this->assertInstanceOf(\PhpParser\Node\Scalar\String_::class, $array->items[1]->value);
+        $this->assertEquals('fontSize', $array->items[1]->key->value);
+        $this->assertEquals('16px', $array->items[1]->value->value);
+    }
 }

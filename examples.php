@@ -44,3 +44,10 @@ $element11 = <>
 </>;
 
 $element = <div>{$hasNotifications && <span>You have new messages</span>}</div>;
+
+$element = <div>
+{/* This is a comment */}
+<span>Visible</span>
+</div>;
+
+$element = <div style={["color" => "red", "fontSize" => "16px"]}>Styled</div>;
