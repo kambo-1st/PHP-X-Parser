@@ -7,11 +7,20 @@ use PhpParser\ErrorHandler;
 use PhpParser\Lexer;
 use PhpParser\Token;
 use PhpParser\Parser\Tokens;
+use PhpToken;
 
 class JSX extends Lexer {
     const MODE_PHP = 0;
     const MODE_JSX = 1;
     const MODE_JSX_EXPR = 2;
+    
+    // Token constants
+    const T_LT = 60;           // <
+    const T_GT = 62;           // >
+    const T_EQUAL = 61;        // =
+    const T_SLASH = 47;        // /
+    const T_CURLY_OPEN = 123;  // {
+    const T_CURLY_CLOSE = 125; // }
     
     /** @var int */
     private $mode = self::MODE_PHP;
@@ -74,467 +83,120 @@ class JSX extends Lexer {
         $this->code = $code;
         $this->closingModeInfo = [];
         
-        // First run: extract ranges
-        $rangeInfo = $this->_tokenize(true);
+        // First get PHP tokens
+        $phpTokens = PhpToken::tokenize($code);
         
-        // Print the range information
-        echo "Range Information:\n";
-        foreach ($rangeInfo as $info) {
-            echo "Mode: " . $info[0] . ", Start: " . $info[1] . ", End: " . $info[2] . "\n";
+        // Convert to our token format and handle JSX
+        $tokens = [];
+        $i = 0;
+        $len = count($phpTokens);
+        
+        while ($i < $len) {
+            $token = $phpTokens[$i];
+            
+            // Check for JSX start
+            if ($token->id === self::T_LT && $this->isJSXStart($phpTokens, $i)) {
+                // Start of JSX element
+                $tokens[] = new Token($token->id, $token->text, $token->line);
+                
+                // Get tag name
+                $i++;
+                $tagToken = $phpTokens[$i];
+                $tokens[] = new Token(T_STRING, $tagToken->text, $tagToken->line);
+                
+                // Handle attributes if any
+                $i++;
+                while ($i < $len && $phpTokens[$i]->id !== self::T_GT) {
+                    if ($phpTokens[$i]->id === T_STRING) {
+                        // Attribute name
+                        $tokens[] = new Token(T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                        $i++;
+                        
+                        if ($phpTokens[$i]->id === self::T_EQUAL) {
+                            $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            $i++;
+                            
+                            if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
+                                // JSX expression
+                                $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                $i++;
+                                
+                                // Get expression content
+                                while ($i < $len && $phpTokens[$i]->id !== self::T_CURLY_CLOSE) {
+                                    $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                    $i++;
+                                }
+                                
+                                if ($i < $len) {
+                                    $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                }
+                            } else {
+                                // String attribute
+                                $tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            }
+                        }
+                    }
+                    $i++;
+                }
+                
+                // Closing bracket
+                if ($i < $len) {
+                    $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                }
+                
+                // Get content until closing tag
+                $i++;
+                $content = '';
+                while ($i < $len && !($phpTokens[$i]->id === self::T_LT && $phpTokens[$i + 1]->id === self::T_SLASH)) {
+                    $content .= $phpTokens[$i]->text;
+                    $i++;
+                }
+                
+                if (!empty($content)) {
+                    $tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
+                }
+                
+                // Handle closing tag
+                if ($i < $len && $phpTokens[$i]->id === self::T_LT) {
+                    $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                    $i++;
+                    
+                    if ($i < $len && $phpTokens[$i]->id === self::T_SLASH) {
+                        $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                        $i++;
+                        
+                        if ($i < $len && $phpTokens[$i]->id === T_STRING) {
+                            $tokens[] = new Token(T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            $i++;
+                            
+                            if ($i < $len && $phpTokens[$i]->id === self::T_GT) {
+                                $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Regular PHP token
+                $tokens[] = new Token($token->id, $token->text, $token->line);
+            }
+            
+            $i++;
         }
         
-        // Reset state for second run
-        $this->position = 0;
-        $this->tokens = [];
-        $this->mode = self::MODE_PHP;
-        $this->jsxDepth = 0;
-        $this->inJSXText = false;
-        $this->textBuffer = '';
-        $this->line = 1;
-        $this->closingModeInfo = [];
-        
-        // Second run: generate tokens
-        $tokens = $this->_tokenize(false);
-
-
+        // Add EOF token
         $tokens[] = new Token(0, '', $this->line);
-
-
+        
         return $tokens;
     }
     
-    /**
-     * Internal tokenization logic that can operate in different modes.
-     * 
-     * @param bool $extractRangesOnly When true, only extracts mode ranges without generating tokens
-     * @param array|null $specificRange Optional [mode, start, end] to tokenize a specific range
-     * @return array Array of tokens (when $extractRangesOnly is false) or range info (when $extractRangesOnly is true)
-     */
-    private function _tokenize(bool $extractRangesOnly, ?array $specificRange = null): array
+    private function isJSXStart(array $tokens, int $i): bool
     {
-        $startPosition = $this->position;
-        error_log("Starting tokenization with mode: " . $this->mode . ", depth: " . $this->jsxDepth);
-        
-        // If a specific range is provided, adjust the mode and position
-        if ($specificRange !== null && !$extractRangesOnly) {
-            list($specificMode, $startPos, $endPos) = $specificRange;
-            $this->mode = $specificMode;
-            $this->position = $startPos;
-            $endPosition = $endPos;
-        } else {
-            $endPosition = strlen($this->code);
-        }
-
-        while ($this->position < ($specificRange !== null ? $endPosition : strlen($this->code))) {
-            $char = $this->code[$this->position];
-            
-            if ($this->mode === self::MODE_PHP) {
-                // Handle PHP opening tag
-                if (substr($this->code, $this->position, 5) === '<?php') {
-                    if (!$extractRangesOnly) {
-                        $this->tokens[] = new Token(T_OPEN_TAG, '<?php', $this->line);
-                    }
-                    $this->position += 5;
-                    continue;
-                }
-
-                if ($char === '<' && $this->isJSXStart()) {
-                    error_log("Entering JSX mode at position " . $this->position . ", depth: " . $this->jsxDepth);
-
-                    if (!$extractRangesOnly) {
-                        if ($this->textBuffer !== '') {
-                            $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
-                            $this->textBuffer = '';
-                        }
-                    }
-                    
-                    echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
-                    $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
-                    $startPosition = $this->position;
-
-                    $this->mode = self::MODE_JSX;
-                    $this->jsxDepth++;
-                    $this->inJSXText = false;
-                    
-                    if (!$extractRangesOnly) {
-                        $this->tokens[] = new Token(ord('<'), '<', $this->line);
-                    }
-                    
-                    $this->position++;
-                    $tagName = $this->consumeJSXTagName();
-                    
-                    if (!$extractRangesOnly) {
-                        $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
-                    }
-                    
-                    continue;
-                }
-
-                // Handle basic PHP tokens
-                if ($char === '$') {
-                    $varName = '';
-                    $this->position++;
-                    while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_')) {
-                        $varName .= $this->code[$this->position];
-                        $this->position++;
-                    }
-                    if (!empty($varName) && !$extractRangesOnly) {
-                        $this->tokens[] = new Token(T_VARIABLE, '$' . $varName, $this->line);
-                    }
-                    continue;
-                }
-
-                if ($char === '=') {
-                    if (!$extractRangesOnly) {
-                        $this->tokens[] = new Token(ord('='), '=', $this->line);
-                    }
-                    $this->position++;
-                    continue;
-                }
-
-                if ($char === ';') {
-                    if (!$extractRangesOnly) {
-                        $this->tokens[] = new Token(ord(';'), ';', $this->line);
-                    }
-                    $this->position++;
-                    continue;
-                }
-
-                if (ctype_space($char)) {
-                    if ($char === "\n") {
-                        $this->line++;
-                    }
-                    $this->position++;
-                    continue;
-                }
-
-                $this->position++;
-                continue;
-            }
-
-            if ($this->mode === self::MODE_JSX) {
-                if ($char === '{') {
-                    if (!$extractRangesOnly && $this->textBuffer !== '') {
-                        $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
-                        $this->textBuffer = '';
-                    }
-
-                    // Check for spread operator
-                    if ($this->position + 3 < strlen($this->code) &&
-                        $this->code[$this->position + 1] === '.' &&
-                        $this->code[$this->position + 2] === '.' &&
-                        $this->code[$this->position + 3] === '.') {
-
-                        echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
-                        $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
-                        $startPosition = $this->position;
-
-                        if (!$extractRangesOnly) {
-                            $this->tokens[] = new Token(ord('.'), '.', $this->line);
-                            $this->tokens[] = new Token(ord('.'), '.', $this->line);
-                            $this->tokens[] = new Token(ord('.'), '.', $this->line);
-                        }
-                        
-                        $this->position += 4;
-                        $this->mode = self::MODE_JSX_EXPR;
-                        continue;
-                    }
-
-                    if (!$extractRangesOnly) {
-                        $this->tokens[] = new Token(ord('{'), '{', $this->line);
-                    }
-
-                    echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
-                    $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
-                    $startPosition = $this->position;
-
-                    $this->mode = self::MODE_JSX_EXPR;
-                    $this->position++;
-                    continue;
-                }
-
-                if ($char === '<') {
-                    if (!$extractRangesOnly && $this->textBuffer !== '') {
-                        $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
-                        $this->textBuffer = '';
-                    }
-
-                    // Check for closing tag
-                    if ($this->position + 1 < strlen($this->code) && $this->code[$this->position + 1] === '/') {
-                        error_log("Found closing tag at position " . $this->position . ", depth: " . $this->jsxDepth);
-                        
-                        if (!$extractRangesOnly) {
-                            $this->tokens[] = new Token(ord('<'), '<', $this->line);
-                            $this->tokens[] = new Token(ord('/'), '/', $this->line);
-                        }
-                        
-                        $this->position += 2;
-
-                        // Get the closing tag name
-                        $tagName = '';
-                        while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_' || $this->code[$this->position] === '-')) {
-                            $tagName .= $this->code[$this->position];
-                            $this->position++;
-                        }
-                        
-                        if (!empty($tagName) && !$extractRangesOnly) {
-                            $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
-                        }
-
-                        // Skip to closing >
-                        while ($this->position < strlen($this->code) && $this->code[$this->position] !== '>') {
-                            if ($this->code[$this->position] === "\n") $this->line++;
-                            $this->position++;
-                        }
-                        if ($this->position < strlen($this->code) && $this->code[$this->position] === '>') {
-                            if (!$extractRangesOnly) {
-                                $this->tokens[] = new Token(ord('>'), '>', $this->line);
-                            }
-                            
-                            $this->jsxDepth--;
-                            if ($this->jsxDepth === 0) {
-                                echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
-                                $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position+1];
-                                $startPosition = $this->position+1;
-
-                                $this->mode = self::MODE_PHP;
-                            }
-                            $this->position++;
-                        }
-                        continue;
-                    }
-
-                    // Handle opening tag
-                    if (!$extractRangesOnly) {
-                        $this->tokens[] = new Token(ord('<'), '<', $this->line);
-                    }
-                    
-                    $this->position++;
-                    $this->jsxDepth++;
-                    $tagName = $this->consumeJSXTagName();
-                    
-                    if (!$extractRangesOnly) {
-                        $this->tokens[] = new Token(T_STRING, $tagName, $this->line);
-                    }
-                    
-                    continue;
-                }
-
-                if ($char === '>' || ($char === '/' && $this->position + 1 < strlen($this->code) && $this->code[$this->position + 1] === '>')) {
-                    error_log("Found closing bracket at position " . $this->position . ", depth: " . $this->jsxDepth . ", inJSXText: " . ($this->inJSXText ? "true" : "false"));
-                    if ($char === '/') {
-                        if (!$extractRangesOnly) {
-                            $this->tokens[] = new Token(ord('/'), '/', $this->line);
-                        }
-                        
-                        $this->position++;
-                        $this->jsxDepth--;
-                        if ($this->jsxDepth === 0) {
-                            if (!$extractRangesOnly) {
-                                $this->tokens[] = new Token(ord('>'), '>', $this->line);
-                            }
-                            
-                            $this->position++;
-                            echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
-                            $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
-                            $startPosition = $this->position;
-                            $this->mode = self::MODE_PHP;
-                            continue;
-                        }
-                    }
-                    
-                    if (!$extractRangesOnly) {
-                        $this->tokens[] = new Token(ord('>'), '>', $this->line);
-                    }
-                    
-                    $this->position++;
-                    if ($char !== '/') {
-                        $this->inJSXText = true;
-                        $this->textBuffer = '';
-                    }
-                    error_log("After closing bracket at position " . $this->position . ", depth: " . $this->jsxDepth . ", inJSXText: " . ($this->inJSXText ? "true" : "false"));
-                    continue;
-                }
-
-                if ($this->inJSXText) {
-                    if (!ctype_space($char) || $this->textBuffer !== '') {
-                        $this->textBuffer .= $char;
-                    }
-                    $this->position++;
-                    continue;
-                }
-
-                if (ctype_alpha($char) || $char === '_' || $char === '-') {
-                    $attrName = '';
-                    while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_' || $this->code[$this->position] === '-')) {
-                        $attrName .= $this->code[$this->position];
-                        $this->position++;
-                    }
-                    
-                    if (!empty($attrName) && !$extractRangesOnly) {
-                        $this->tokens[] = new Token(T_STRING, $attrName, $this->line);
-                    }
-
-                    // Look for equals sign
-                    while ($this->position < strlen($this->code) && ctype_space($this->code[$this->position])) {
-                        if ($this->code[$this->position] === "\n") $this->line++;
-                        $this->position++;
-                    }
-
-                    if ($this->position < strlen($this->code) && $this->code[$this->position] === '=') {
-                        if (!$extractRangesOnly) {
-                            $this->tokens[] = new Token(ord('='), '=', $this->line);
-                        }
-                        
-                        $this->position++;
-
-                        // Skip whitespace
-                        while ($this->position < strlen($this->code) && ctype_space($this->code[$this->position])) {
-                            if ($this->code[$this->position] === "\n") $this->line++;
-                            $this->position++;
-                        }
-
-                        if ($this->code[$this->position] === '{') {
-                            if (!$extractRangesOnly) {
-                                $this->tokens[] = new Token(ord('{'), '{', $this->line);
-                            }
-                            
-                            echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
-                            $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
-                            $startPosition = $this->position;
-
-                            $this->mode = self::MODE_JSX_EXPR;
-                            $this->position++;
-                        } else if ($this->code[$this->position] === '"') {
-                            $this->position++;
-                            $value = '';
-                            while ($this->position < strlen($this->code) && $this->code[$this->position] !== '"') {
-                                $value .= $this->code[$this->position];
-                                $this->position++;
-                            }
-                            
-                            if (!$extractRangesOnly) {
-                                $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $value, $this->line);
-                            }
-                            
-                            $this->position++;
-                        }
-                    }
-                    continue;
-                }
-
-                if (ctype_space($char)) {
-                    if ($char === "\n") {
-                        $this->line++;
-                    }
-                    $this->position++;
-                    continue;
-                }
-
-                $this->position++;
-                continue;
-            }
-
-            if ($this->mode === self::MODE_JSX_EXPR) {
-                if ($char === '}') {
-                    echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
-                    $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position + 1];
-                    $startPosition = $this->position + 1;
-
-                    $this->mode = self::MODE_JSX;
-                    
-                    if (!$extractRangesOnly) {
-                        $this->tokens[] = new Token(ord('}'), '}', $this->line);
-                    }
-                    
-                    $this->position++;
-                    continue;
-                }
-
-                if ($char === '$') {
-                    $varName = '';
-                    $this->position++;
-                    while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_')) {
-                        $varName .= $this->code[$this->position];
-                        $this->position++;
-                    }
-                    
-                    if (!empty($varName) && !$extractRangesOnly) {
-                        $this->tokens[] = new Token(T_VARIABLE, '$' . $varName, $this->line);
-                    }
-                    
-                    continue;
-                }
-
-                if (ctype_space($char)) {
-                    if ($char === "\n") {
-                        $this->line++;
-                    }
-                    $this->position++;
-                    continue;
-                }
-
-                $this->position++;
-                continue;
-            }
-        }
-
-        // If we were processing a specific range, exit with current tokens
-        if ($specificRange !== null && !$extractRangesOnly) {
-            return $this->tokens;
-        }
-
-        // Emit any remaining text buffer
-        if (!$extractRangesOnly && $this->textBuffer !== '') {
-            $this->tokens[] = new Token(T_CONSTANT_ENCAPSED_STRING, $this->textBuffer, $this->line);
-        }
-
-        // Add EOF token
-        /*if (!$extractRangesOnly) {
-            $this->tokens[] = new Token(0, '', $this->line);
-        }*/
-
-        echo "Closing ".$this->mode." mode (0 - PHP):" .$startPosition . ' possition: '.$this->position;
-        $this->closingModeInfo[] = [$this->mode, $startPosition, $this->position];
-
-        if (!$extractRangesOnly) {
-            $code = '';
-            foreach ($this->closingModeInfo as $info) {
-                $code .= "\n BLOCK of type ".$info[0].":".substr($this->code, $info[1], $info[2] - $info[1])."\n";
-            }
-            echo "Code: " . $code;
-            
-            return $this->tokens;
-        } else {
-            // Return the range information when extracting ranges
-            return $this->closingModeInfo;
-        }
+        $next = $i + 1;
+        return isset($tokens[$next]) && 
+               $tokens[$next]->id === T_STRING &&
+               ctype_alpha($tokens[$next]->text[0]);
     }
 
-    private function isJSXStart(): bool
-    {
-        // Skip any whitespace after <
-        $i = $this->position + 1;
-        while ($i < strlen($this->code) && ctype_space($this->code[$i])) {
-            if ($this->code[$i] === "\n") $this->line++;
-            $i++;
-        }
-
-        // Check if next character is a valid JSX tag start
-        return $i < strlen($this->code) && (ctype_alpha($this->code[$i]) || $this->code[$i] === '_');
-    }
-
-    private function consumeJSXTagName(): string
-    {
-        $tagName = '';
-        while ($this->position < strlen($this->code) && (ctype_alnum($this->code[$this->position]) || $this->code[$this->position] === '_' || $this->code[$this->position] === '-')) {
-            $tagName .= $this->code[$this->position];
-            $this->position++;
-        }
-
-        return $tagName;
-    }
-    
     /**
      * Returns the collected closing mode information.
      * Each entry is an array with structure [mode, startPosition, endPosition].
