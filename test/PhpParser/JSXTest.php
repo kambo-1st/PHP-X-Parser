@@ -228,4 +228,46 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         $this->assertInstanceOf(Text::class, $jsxElement->children[0]);
         $this->assertEquals('Hello World', $jsxElement->children[0]->value);
     }
+
+    public function testParseClassWithJSXReturn() {
+        $stmts = $this->parseAndTransform('<?php
+        class App extends Component {
+            public function render() {
+                return (
+                    <div>{$this->foo}</div>
+                );
+            }
+        }
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Class_::class, $stmt);
+        $this->assertEquals('App', $stmt->name->name);
+        $this->assertEquals('Component', $stmt->extends->name);
+        
+        $method = $stmt->stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\ClassMethod::class, $method);
+        $this->assertEquals('render', $method->name->name);
+        
+        $return = $method->stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Return_::class, $return);
+        $this->assertInstanceOf(Element::class, $return->expr);
+
+        $jsxElement = $return->expr;
+        $this->assertEquals('div', $jsxElement->name);
+        $this->assertEmpty($jsxElement->jsxAttributes);
+        $this->assertCount(1, $jsxElement->children);
+        
+        $this->assertInstanceOf(ExpressionContainer::class, $jsxElement->children[0]);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\PropertyFetch::class, $jsxElement->children[0]->expression);
+        
+        $propertyFetch = $jsxElement->children[0]->expression;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $propertyFetch->var);
+        $this->assertEquals('this', $propertyFetch->var->name);
+        $this->assertEquals('foo', $propertyFetch->name->name);
+        
+        $this->assertEquals('div', $jsxElement->closingName);
+    }
 }
