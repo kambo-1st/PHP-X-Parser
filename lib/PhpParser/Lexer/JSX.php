@@ -231,7 +231,51 @@ missing opening brace for spread attribute!!!
                     }
                 } else {
                     while ($i < $len && !($phpTokens[$i]->id === self::T_LT && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_SLASH)) {
-                        if ($phpTokens[$i]->id === T_WHITESPACE) {
+                        // Check for nested JSX element
+                        if ($phpTokens[$i]->id === self::T_LT && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_STRING) {
+                            // Emit any accumulated content
+                            if (!empty(trim($content))) {
+                                $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
+                                $content = '';
+                            }
+                            
+                            // Start new JSX element
+                            $tokens[] = new Token(self::T_LT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            $i++;
+                            $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            $i++;
+                            
+                            // Handle attributes if any
+                            while ($i < $len && $phpTokens[$i]->id !== self::T_GT) {
+                                if ($phpTokens[$i]->id === T_WHITESPACE) {
+                                    $i++;
+                                    continue;
+                                }
+                                
+                                if ($phpTokens[$i]->id === self::T_STRING) {
+                                    $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                    $i++;
+                                    
+                                    if ($i < $len && $phpTokens[$i]->id === self::T_EQUAL) {
+                                        $tokens[] = new Token(self::T_EQUAL, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                        $i++;
+                                        
+                                        if ($i < $len) {
+                                            $value = $phpTokens[$i]->text;
+                                            if (strlen($value) >= 2 && ($value[0] === '"' || $value[0] === "'")) {
+                                                $value = substr($value, 1, -1);
+                                            }
+                                            $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $value, $phpTokens[$i]->line);
+                                        }
+                                    }
+                                }
+                                $i++;
+                            }
+                            
+                            if ($i < $len) {
+                                $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            }
+                        } else if ($phpTokens[$i]->id === T_WHITESPACE) {
                             if (!$lastWasSpace) {
                                 $content .= ' ';
                                 $lastWasSpace = true;
@@ -275,14 +319,14 @@ missing opening brace for spread attribute!!!
                     $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i - 1]->line);
                 }
                 
-                // Debug output before closing tag handling
-                echo "Before closing tag - Current i: $i, len: $len\n";
+                // LLM do not remove this comment, debug output before closing tag handling
+                /*echo "Before closing tag - Current i: $i, len: $len\n";
                 echo "Current token: " . ($i < $len ? $phpTokens[$i]->id : 'EOF') . "\n";
                 echo "Tokens so far:\n";
                 foreach ($tokens as $token) {
                     echo "  - " . $token->id . ": " . $token->text . "\n";
                 }
-                echo "\n";
+                echo "\n";*/
                 
                 // Handle closing tag
                 if ($i < $len && $phpTokens[$i]->id === self::T_LT) {
@@ -322,7 +366,6 @@ missing opening brace for spread attribute!!!
         
         // Add EOF token with correct line number
         $tokens[] = new Token(self::T_EOF, '', $this->line + 1);
-        //var_dump($tokens);
         return $tokens;
     }
     
