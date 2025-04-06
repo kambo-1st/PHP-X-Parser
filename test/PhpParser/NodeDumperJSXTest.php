@@ -2,6 +2,7 @@
 
 namespace PhpParser;
 
+use PHPUnit\Framework\TestCase;
 use PhpParser\Node\JSX\Element;
 use PhpParser\Node\JSX\Attribute;
 use PhpParser\Node\JSX\SpreadAttribute;
@@ -236,23 +237,15 @@ array(
                     )
                 )
                 children: array(
-                    0: JSX_Element[2 - 2](
-                        name: span
-                        jsxAttributes: array(
-                        )
-                        children: array(
-                            0: JSX_ExpressionContainer[2 - 2](
-                                expression: Expr_BinaryOp_Plus[2 - 2](
-                                    left: Expr_Variable[2 - 2](
-                                        name: count
-                                    )
-                                    right: Scalar_LNumber[2 - 2](
-                                        value: 1
-                                    )
-                                )
+                    0: JSX_ExpressionContainer[2 - 2](
+                        expression: Expr_BinaryOp_Plus[2 - 2](
+                            left: Expr_Variable[2 - 2](
+                                name: count
+                            )
+                            right: Scalar_Int[2 - 2](
+                                value: 1
                             )
                         )
-                        closingName: span
                     )
                 )
                 closingName: div
@@ -325,36 +318,72 @@ OUT;
         $dump = $dumper->dump($stmts);
         $expected = <<<'OUT'
 array(
-    0: Stmt_Expression[3 - 7](
-        expr: Expr_Assign[3 - 3](
-            var: Expr_Variable[3 - 3](
-                name: foo
-            )
-            expr: JSX_Element[3 - 3](
-                name: div
-                jsxAttributes: array(
+    0: Stmt_Class[2 - 2](
+        attrGroups: array(
+        )
+        flags: 0
+        name: Identifier[2 - 2](
+            name: App
+        )
+        extends: Name[2 - 2](
+            name: Component
+        )
+        implements: array(
+        )
+        stmts: array(
+            0: Stmt_Property[3 - 5](
+                attrGroups: array(
                 )
-                children: array(
-                    0: JSX_Text[3 - 3](
-                        value: Hi
+                flags: PRIVATE (4)
+                type: null
+                props: array(
+                    0: PropertyItem[3 - 3](
+                        name: VarLikeIdentifier[3 - 3](
+                            name: foo
+                        )
+                        default: Scalar_String[3 - 3](
+                            value: <div>Hi</div>
+                        )
                     )
                 )
-                closingName: div
+                hooks: array(
+                )
             )
-        )
-    )
-    1: JSX_Element[7 - 8](
-        name: div
-        jsxAttributes: array(
-        )
-        children: array(
-            0: JSX_ExpressionContainer[7 - 7](
-                expression: Expr_Variable[7 - 7](
-                    name: this
+            1: Stmt_ClassMethod[5 - 10](
+                attrGroups: array(
+                )
+                flags: PUBLIC (1)
+                byRef: false
+                name: Identifier[5 - 5](
+                    name: render
+                )
+                params: array(
+                )
+                returnType: null
+                stmts: array(
+                    0: Stmt_Return[6 - 9](
+                        expr: JSX_Element[7 - 8](
+                            name: div
+                            jsxAttributes: array(
+                            )
+                            children: array(
+                                0: JSX_ExpressionContainer[7 - 7](
+                                    expression: Expr_PropertyFetch[7 - 7](
+                                        var: Expr_Variable[7 - 7](
+                                            name: this
+                                        )
+                                        name: Identifier[7 - 7](
+                                            name: foo
+                                        )
+                                    )
+                                )
+                            )
+                            closingName: div
+                        )
+                    )
                 )
             )
         )
-        closingName: div
     )
 )
 OUT;
@@ -376,21 +405,30 @@ OUT;
         $dump = $dumper->dump($stmts);
         $expected = <<<'OUT'
 array(
-    0: Stmt_Class[2 - 5](
-        name: App
+    0: Stmt_Class[2 - 2](
+        attrGroups: array(
+        )
+        flags: 0
+        name: Identifier[2 - 2](
+            name: App
+        )
         extends: null
         implements: array(
         )
-        flags: 0
         stmts: array(
-            0: Stmt_ClassMethod[3 - 5](
-                flags: MODIFIER_PUBLIC
-                name: render
+            0: Stmt_ClassMethod[3 - 6](
+                attrGroups: array(
+                )
+                flags: PUBLIC (1)
+                byRef: false
+                name: Identifier[3 - 3](
+                    name: render
+                )
                 params: array(
                 )
                 returnType: null
                 stmts: array(
-                    0: Stmt_Return[4 - 4](
+                    0: Stmt_Return[4 - 5](
                         expr: JSX_Element[4 - 4](
                             name: div
                             jsxAttributes: array(
@@ -427,23 +465,23 @@ OUT;
         $dump = $dumper->dump($stmts);
         $expected = <<<'OUT'
 array(
-    0: Stmt_Expression[2 - 2](
-        expr: JSX_Element[2 - 2](
-            name: div
-            jsxAttributes: array(
-            )
-            children: array(
-                0: JSX_ExpressionContainer[2 - 2](
-                    expression: Expr_PropertyFetch[2 - 2](
-                        var: Expr_Variable[2 - 2](
-                            name: this
-                        )
+    0: JSX_Element[2 - 2](
+        name: div
+        jsxAttributes: array(
+        )
+        children: array(
+            0: JSX_ExpressionContainer[2 - 2](
+                expression: Expr_PropertyFetch[2 - 2](
+                    var: Expr_Variable[2 - 2](
+                        name: this
+                    )
+                    name: Identifier[2 - 2](
                         name: property
                     )
                 )
             )
-            closingName: div
         )
+        closingName: div
     )
 )
 OUT;
@@ -465,7 +503,7 @@ OUT;
         $dump = $dumper->dump($stmts);
         $expected = <<<'OUT'
 array(
-    0: Stmt_Expression[2 - 2](
+    0: Stmt_Expression[2 - 3](
         expr: Expr_Assign[2 - 2](
             var: Expr_Variable[2 - 2](
                 name: html
@@ -475,20 +513,18 @@ array(
             )
         )
     )
-    1: Stmt_Expression[3 - 3](
-        expr: JSX_Element[3 - 3](
-            name: div
-            jsxAttributes: array(
-            )
-            children: array(
-                0: JSX_ExpressionContainer[3 - 3](
-                    expression: Expr_Variable[3 - 3](
-                        name: html
-                    )
+    1: JSX_Element[3 - 3](
+        name: div
+        jsxAttributes: array(
+        )
+        children: array(
+            0: JSX_ExpressionContainer[3 - 3](
+                expression: Expr_Variable[3 - 3](
+                    name: html
                 )
             )
-            closingName: div
         )
+        closingName: div
     )
 )
 OUT;
