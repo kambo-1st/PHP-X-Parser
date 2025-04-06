@@ -305,43 +305,47 @@ class JSX extends Lexer {
                         } else if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
                             echo "DEBUG: Found JSX expression in content, switching to JSX_EXPR mode\n";
                             $this->mode = self::MODE_JSX_EXPR;
-                            // Handle JSX expression
-                            if (!empty($content)) {
-                                $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
-                                $content = '';
-                            }
-                            $tokens[] = new Token(self::T_CURLY_OPEN, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            $tokens[] = $phpTokens[$i];
                             $i++;
                             
                             // Get expression content
                             while ($i < $len && $phpTokens[$i]->id !== self::T_CURLY_CLOSE) {
-                                echo "DEBUG: Processing expression token: " . $phpTokens[$i]->id . " (" . $phpTokens[$i]->text . ")\n";
-                                if ($phpTokens[$i]->id === self::T_LT && $this->isJSXStart($phpTokens, $i)) {
+                                $token = $phpTokens[$i];
+                                echo "DEBUG: Processing expression token: " . $token->id . " (" . $token->text . ")\n";
+                                
+                                // If we find a JSX element in the expression, switch to JSX mode
+                                if ($token->id === self::T_LT && $this->isJSXStart($phpTokens, $i)) {
                                     echo "DEBUG: Found JSX element in expression, switching to JSX mode\n";
                                     $this->mode = self::MODE_JSX;
-                                    
-                                    // Handle opening tag
-                                    $tokens[] = new Token(self::T_LT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                    $tokens[] = $token;
                                     $i++;
-                                    if ($i < $len) {
-                                        $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
-                                        $i++;
-                                    }
+                                    
+                                    // Get tag name
+                                    $tagToken = $phpTokens[$i];
+                                    echo "DEBUG: JSX tag name: " . $tagToken->text . "\n";
+                                    $tokens[] = new Token(self::T_STRING, $tagToken->text, $tagToken->line);
+                                    $i++;
                                     
                                     // Handle closing bracket
                                     if ($i < $len && $phpTokens[$i]->id === self::T_GT) {
-                                        $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                        echo "DEBUG: Processing closing bracket\n";
+                                        $tokens[] = $phpTokens[$i];
                                         $i++;
                                     }
                                     
-                                    // Handle content until closing tag
+                                    // Get content until closing tag
                                     $content = '';
+                                    $lastWasSpace = false;
                                     while ($i < $len && !($phpTokens[$i]->id === self::T_LT && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_SLASH)) {
                                         if ($phpTokens[$i]->id === T_WHITESPACE) {
-                                            $i++;
-                                            continue;
+                                            if (!$lastWasSpace) {
+                                                $content .= ' ';
+                                                $lastWasSpace = true;
+                                            }
+                                        } else {
+                                            $content .= $phpTokens[$i]->text;
+                                            $lastWasSpace = false;
                                         }
-                                        $content .= $phpTokens[$i]->text;
                                         $i++;
                                     }
                                     
@@ -351,28 +355,39 @@ class JSX extends Lexer {
                                     
                                     // Handle closing tag
                                     if ($i < $len && $phpTokens[$i]->id === self::T_LT) {
-                                        $tokens[] = new Token(self::T_LT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                        echo "DEBUG: Processing closing tag\n";
+                                        $tokens[] = $phpTokens[$i];
                                         $i++;
                                         
                                         if ($i < $len && $phpTokens[$i]->id === self::T_SLASH) {
-                                            $tokens[] = new Token(self::T_SLASH, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                            $tokens[] = $phpTokens[$i];
                                             $i++;
                                             
                                             if ($i < $len && $phpTokens[$i]->id === self::T_STRING) {
-                                                $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                $tokens[] = $phpTokens[$i];
                                                 $i++;
                                                 
                                                 if ($i < $len && $phpTokens[$i]->id === self::T_GT) {
-                                                    $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                    $tokens[] = $phpTokens[$i];
+                                                    $i++;
                                                 }
                                             }
                                         }
                                     }
                                     
-                                    // Switch back to expression mode
+                                    // Switch back to JSX_EXPR mode after processing the JSX element
+                                    echo "DEBUG: Switching back to JSX_EXPR mode after processing JSX element\n";
                                     $this->mode = self::MODE_JSX_EXPR;
                                 } else {
-                                    $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                    // For ternary operators, stay in JSX_EXPR mode
+                                    if ($token->id === 63 || $token->id === 58) { // ? or :
+                                        echo "DEBUG: Processing ternary operator token: " . $token->text . "\n";
+                                        $tokens[] = $token;
+                                        $i++;
+                                        continue;
+                                    }
+                                    
+                                    $tokens[] = $token;
                                     $i++;
                                 }
                             }
@@ -380,7 +395,7 @@ class JSX extends Lexer {
                             if ($i < $len) {
                                 echo "DEBUG: Closing JSX expression, switching back to JSX mode\n";
                                 $this->mode = self::MODE_JSX;
-                                $tokens[] = new Token(self::T_CURLY_CLOSE, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                $tokens[] = $phpTokens[$i];
                             }
                         } else if ($phpTokens[$i]->id === self::T_SEMICOLON) {
                             // Handle semicolon separately
