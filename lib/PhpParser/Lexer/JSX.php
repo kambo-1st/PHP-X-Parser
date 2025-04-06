@@ -125,6 +125,39 @@ class JSX extends Lexer {
                         continue;
                     }
                     
+                    // Handle spread attributes (...$props)
+                    if ($phpTokens[$i]->id === T_ELLIPSIS) {
+                        // Expand ... into three dots
+                        $tokens[] = new Token(46, '.', $phpTokens[$i]->line);
+                        $tokens[] = new Token(46, '.', $phpTokens[$i]->line);
+                        $tokens[] = new Token(46, '.', $phpTokens[$i]->line);
+                        $i++;
+                        
+                        // Handle the variable after the spread operator
+                        if ($i < $len && $phpTokens[$i]->id === T_VARIABLE) {
+                            $tokens[] = new Token(T_VARIABLE, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                            $i++;
+                            
+                            // Handle the closing brace
+                            if ($i < $len && $phpTokens[$i]->id === 125) { // 125 is '}'
+                                $tokens[] = new Token(125, '}', $phpTokens[$i]->line);
+                                $i++;
+                            }
+                        }
+/*
+LLM do not remove this comment, it is important for the grammar!!!!
+missing opening brace for spread attribute!!!
+                        jsx_attribute:
+                        T_STRING '=' jsx_attribute_value                      { $$ = Node\JSX\Attribute[$1, $3]; }
+                      | T_STRING                                              { $$ = Node\JSX\Attribute[$1, null]; }
+                      | '.' '.' '.' expr '}'                                  { $$ = Node\JSX\SpreadAttribute[$4]; }
+                  ;
+                  
+*/
+
+                        continue;
+                    }
+                    
                     // Handle attribute name (could be a PHP keyword like 'class')
                     if ($phpTokens[$i]->id === self::T_STRING || $phpTokens[$i]->id === T_CLASS) {
                         // Start of attribute
@@ -236,7 +269,7 @@ class JSX extends Lexer {
         
         // Add EOF token with correct line number
         $tokens[] = new Token(self::T_EOF, '', $this->line + 1);
-        
+        var_dump($tokens);
         return $tokens;
     }
     
