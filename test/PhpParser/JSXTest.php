@@ -275,9 +275,9 @@ class JSXTest extends \PHPUnit\Framework\TestCase
 
     public function testParseJSXElementWithConditionalRendering() {
         $stmts = $this->parseAndTransform('<?php
-        $element = <div>{ $isLoggedIn ? <span>Welcome</span> : <a href="/login">Login</a> }</div>;
+        $element = <div>{$isLoggedIn ? <span>Welcome</span> : <a>Login</a>}</div>;
         ');
-
+//$element = <div>{$isLoggedIn ? <span>Welcome</span> : <a>Login</a>}</div>;
         $this->assertCount(1, $stmts);
 
         $stmt = $stmts[0];

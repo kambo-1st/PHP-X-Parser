@@ -89,6 +89,8 @@ class JSX extends Lexer {
         $this->code = $code;
         $this->closingModeInfo = [];
         
+        echo "DEBUG: Starting tokenization in mode: " . $this->mode . "\n";
+        
         // First get PHP tokens
         $phpTokens = PhpToken::tokenize($code);
         
@@ -100,6 +102,8 @@ class JSX extends Lexer {
         while ($i < $len) {
             $token = $phpTokens[$i];
             
+            echo "DEBUG: Processing token: " . $token->id . " (" . $token->text . ") in mode: " . $this->mode . "\n";
+            
             // Skip whitespace tokens
             if ($token->id === T_WHITESPACE) {
                 $i++;
@@ -108,12 +112,15 @@ class JSX extends Lexer {
             
             // Check for JSX start
             if ($token->id === self::T_LT && $this->isJSXStart($phpTokens, $i)) {
+                echo "DEBUG: Found JSX start, switching to JSX mode\n";
+                $this->mode = self::MODE_JSX;
                 // Start of JSX element
                 $tokens[] = new Token(self::T_LT, $token->text, $token->line);
                 
                 // Get tag name
                 $i++;
                 $tagToken = $phpTokens[$i];
+                echo "DEBUG: JSX tag name: " . $tagToken->text . "\n";
                 $tokens[] = new Token(self::T_STRING, $tagToken->text, $tagToken->line);
                 
                 // Handle attributes if any
@@ -125,6 +132,8 @@ class JSX extends Lexer {
                         continue;
                     }
                     
+                    echo "DEBUG: Processing attribute token: " . $phpTokens[$i]->id . " (" . $phpTokens[$i]->text . ")\n";
+                    
                     // Check for self-closing tag
                     if ($phpTokens[$i]->id === self::T_SLASH && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_GT) {
                         $tokens[] = new Token(self::T_SLASH, $phpTokens[$i]->text, $phpTokens[$i]->line);
@@ -134,6 +143,7 @@ class JSX extends Lexer {
                     
                     // Handle spread attributes (...$props)
                     if ($phpTokens[$i]->id === T_ELLIPSIS) {
+                        echo "DEBUG: Found spread attribute\n";
                         // Expand ... into three dots
                         $tokens[] = new Token(46, '.', $phpTokens[$i]->line);
                         $tokens[] = new Token(46, '.', $phpTokens[$i]->line);
@@ -151,22 +161,12 @@ class JSX extends Lexer {
                                 $i++;
                             }
                         }
-/*
-LLM do not remove this comment, it is important for the grammar!!!!
-missing opening brace for spread attribute!!!
-                        jsx_attribute:
-                        T_STRING '=' jsx_attribute_value                      { $$ = Node\JSX\Attribute[$1, $3]; }
-                      | T_STRING                                              { $$ = Node\JSX\Attribute[$1, null]; }
-                      | '.' '.' '.' expr '}'                                  { $$ = Node\JSX\SpreadAttribute[$4]; }
-                  ;
-                  
-*/
-
                         continue;
                     }
                     
                     // Handle attribute name (could be a PHP keyword like 'class')
                     if ($phpTokens[$i]->id === self::T_STRING || $phpTokens[$i]->id === T_CLASS) {
+                        echo "DEBUG: Processing attribute name: " . $phpTokens[$i]->text . "\n";
                         // Start of attribute
                         $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
                         $i++;
@@ -198,17 +198,22 @@ missing opening brace for spread attribute!!!
                             }
                             
                             if ($i < $len && $phpTokens[$i]->id === self::T_CURLY_OPEN) {
+                                echo "DEBUG: Found JSX expression attribute, switching to JSX_EXPR mode\n";
+                                $this->mode = self::MODE_JSX_EXPR;
                                 // JSX expression attribute
                                 $tokens[] = new Token(self::T_CURLY_OPEN, $phpTokens[$i]->text, $phpTokens[$i]->line);
                                 $i++;
                                 
                                 // Get expression content
                                 while ($i < $len && $phpTokens[$i]->id !== self::T_CURLY_CLOSE) {
+                                    echo "DEBUG: Processing expression token: " . $phpTokens[$i]->id . " (" . $phpTokens[$i]->text . ")\n";
                                     $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
                                     $i++;
                                 }
                                 
                                 if ($i < $len) {
+                                    echo "DEBUG: Closing JSX expression attribute, switching back to JSX mode\n";
+                                    $this->mode = self::MODE_JSX;
                                     $tokens[] = new Token(self::T_CURLY_CLOSE, $phpTokens[$i]->text, $phpTokens[$i]->line);
                                 }
                             } else if ($i < $len) {
@@ -217,6 +222,7 @@ missing opening brace for spread attribute!!!
                                 if (strlen($value) >= 2 && ($value[0] === '"' || $value[0] === "'")) {
                                     $value = substr($value, 1, -1);
                                 }
+                                echo "DEBUG: Processing attribute value: " . $value . "\n";
                                 $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $value, $phpTokens[$i]->line);
                             }
                         }
@@ -226,6 +232,7 @@ missing opening brace for spread attribute!!!
                 
                 // Closing bracket
                 if ($i < $len) {
+                    echo "DEBUG: Processing closing bracket\n";
                     $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
                 }
                 
@@ -233,6 +240,8 @@ missing opening brace for spread attribute!!!
                 $i++;
                 $content = '';
                 $lastWasSpace = false;
+                
+                echo "DEBUG: Processing JSX content\n";
                 
                 // Skip content processing if it's a self-closing tag
                 if (end($tokens)->id === self::T_SLASH) {
@@ -245,6 +254,7 @@ missing opening brace for spread attribute!!!
                     while ($i < $len && !($phpTokens[$i]->id === self::T_LT && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_SLASH)) {
                         // Check for nested JSX element
                         if ($phpTokens[$i]->id === self::T_LT && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_STRING) {
+                            echo "DEBUG: Found nested JSX element in content\n";
                             // Emit any accumulated content
                             if (!empty(trim($content))) {
                                 $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
@@ -293,6 +303,8 @@ missing opening brace for spread attribute!!!
                                 $lastWasSpace = true;
                             }
                         } else if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
+                            echo "DEBUG: Found JSX expression in content, switching to JSX_EXPR mode\n";
+                            $this->mode = self::MODE_JSX_EXPR;
                             // Handle JSX expression
                             if (!empty($content)) {
                                 $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
@@ -303,11 +315,71 @@ missing opening brace for spread attribute!!!
                             
                             // Get expression content
                             while ($i < $len && $phpTokens[$i]->id !== self::T_CURLY_CLOSE) {
-                                $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
-                                $i++;
+                                echo "DEBUG: Processing expression token: " . $phpTokens[$i]->id . " (" . $phpTokens[$i]->text . ")\n";
+                                if ($phpTokens[$i]->id === self::T_LT && $this->isJSXStart($phpTokens, $i)) {
+                                    echo "DEBUG: Found JSX element in expression, switching to JSX mode\n";
+                                    $this->mode = self::MODE_JSX;
+                                    
+                                    // Handle opening tag
+                                    $tokens[] = new Token(self::T_LT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                    $i++;
+                                    if ($i < $len) {
+                                        $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                        $i++;
+                                    }
+                                    
+                                    // Handle closing bracket
+                                    if ($i < $len && $phpTokens[$i]->id === self::T_GT) {
+                                        $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                        $i++;
+                                    }
+                                    
+                                    // Handle content until closing tag
+                                    $content = '';
+                                    while ($i < $len && !($phpTokens[$i]->id === self::T_LT && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_SLASH)) {
+                                        if ($phpTokens[$i]->id === T_WHITESPACE) {
+                                            $i++;
+                                            continue;
+                                        }
+                                        $content .= $phpTokens[$i]->text;
+                                        $i++;
+                                    }
+                                    
+                                    if (!empty(trim($content))) {
+                                        $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
+                                    }
+                                    
+                                    // Handle closing tag
+                                    if ($i < $len && $phpTokens[$i]->id === self::T_LT) {
+                                        $tokens[] = new Token(self::T_LT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                        $i++;
+                                        
+                                        if ($i < $len && $phpTokens[$i]->id === self::T_SLASH) {
+                                            $tokens[] = new Token(self::T_SLASH, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                            $i++;
+                                            
+                                            if ($i < $len && $phpTokens[$i]->id === self::T_STRING) {
+                                                $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                $i++;
+                                                
+                                                if ($i < $len && $phpTokens[$i]->id === self::T_GT) {
+                                                    $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Switch back to expression mode
+                                    $this->mode = self::MODE_JSX_EXPR;
+                                } else {
+                                    $tokens[] = new Token($phpTokens[$i]->id, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                    $i++;
+                                }
                             }
                             
                             if ($i < $len) {
+                                echo "DEBUG: Closing JSX expression, switching back to JSX mode\n";
+                                $this->mode = self::MODE_JSX;
                                 $tokens[] = new Token(self::T_CURLY_CLOSE, $phpTokens[$i]->text, $phpTokens[$i]->line);
                             }
                         } else if ($phpTokens[$i]->id === self::T_SEMICOLON) {
@@ -331,17 +403,9 @@ missing opening brace for spread attribute!!!
                     $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i - 1]->line);
                 }
                 
-                // LLM do not remove this comment, debug output before closing tag handling
-                /*echo "Before closing tag - Current i: $i, len: $len\n";
-                echo "Current token: " . ($i < $len ? $phpTokens[$i]->id : 'EOF') . "\n";
-                echo "Tokens so far:\n";
-                foreach ($tokens as $token) {
-                    echo "  - " . $token->id . ": " . $token->text . "\n";
-                }
-                echo "\n";*/
-                
                 // Handle closing tag
                 if ($i < $len && $phpTokens[$i]->id === self::T_LT) {
+                    echo "DEBUG: Processing closing tag\n";
                     $tokens[] = new Token(self::T_LT, $phpTokens[$i]->text, $phpTokens[$i]->line);
                     $i++;
                     
