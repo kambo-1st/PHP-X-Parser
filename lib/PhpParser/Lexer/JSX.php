@@ -121,7 +121,17 @@ class JSX extends Lexer {
                 $i++;
                 $tagToken = $phpTokens[$i];
                 echo "DEBUG: JSX tag name: " . $tagToken->text . "\n";
-                $tokens[] = new Token(self::T_STRING, $tagToken->text, $tagToken->line);
+                
+                // Handle component names with dots (e.g. Some.Component)
+                $componentName = $tagToken->text;
+                while ($i + 1 < $len && $phpTokens[$i + 1]->id === 46) { // 46 is '.'
+                    $i += 2; // Skip the dot and get the next part
+                    if ($i < $len) {
+                        $componentName .= '.' . $phpTokens[$i]->text;
+                    }
+                }
+                
+                $tokens[] = new Token(self::T_STRING, $componentName, $tagToken->line);
                 
                 // Handle attributes if any
                 $i++;

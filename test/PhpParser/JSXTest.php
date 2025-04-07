@@ -495,4 +495,22 @@ $element10 = <ul>
         $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $funcCall->args[1]->value);
     }
 
+
+    public function testParseJSXElementWithComponent() {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <Some.Component />;
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('Some.Component', $jsxElement->name);
+    }
 }

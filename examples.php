@@ -56,3 +56,5 @@ $element = <ul>
             { array_map(fn($item) => <li>{$item}</li>, $items) }
         </ul>;
 
+
+$element = <Some.Component />;
