@@ -1468,6 +1468,17 @@ jsx_children:
       /* empty */                                           { $$ = []; }
     | jsx_children jsx_child                                { push($1, $2); }
     | jsx_children '{' jsx_expr '}'                        { push($1, Node\JSX\ExpressionContainer[$3]); }
+    | jsx_children T_STRING              { 
+        // Handle text after closing tags
+        if (count($1) > 0 && $1[count($1)-1] instanceof Node\JSX\Text) {
+            // Merge with previous text node
+            $last = array_pop($1);
+            $text = $last->value . $2;
+            push($1, Node\JSX\Text[$text]);
+        } else {
+            push($1, Node\JSX\Text[$2]);
+        }
+      }
 ;
 
 jsx_child:

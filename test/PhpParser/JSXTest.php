@@ -205,6 +205,43 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         $this->assertEquals('div', $jsxElement->closingName);
     }
 
+// <?php $element = <div><span><strong>Deep</strong> nesting</span></div>;
+
+    public function testParseJSXElementWithNestedElements3() {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <div><span><strong>Deep nesting</strong></span></div>;
+        ');
+
+        $this->assertCount(1, $stmts);  
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('div', $jsxElement->name);
+        $this->assertCount(1, $jsxElement->children);
+
+        $this->assertInstanceOf(Element::class, $jsxElement->children[0]);
+        $nestedElement = $jsxElement->children[0];
+        $this->assertEquals('span', $nestedElement->name);
+        $this->assertCount(1, $nestedElement->children);
+
+        $this->assertInstanceOf(Element::class, $nestedElement->children[0]);
+        $strongElement = $nestedElement->children[0];
+        $this->assertEquals('strong', $strongElement->name);
+        $this->assertCount(1, $strongElement->children);
+
+        $this->assertInstanceOf(Text::class, $strongElement->children[0]);
+        $this->assertEquals('Deep nesting', $strongElement->children[0]->value);
+
+        $this->assertEquals('div', $jsxElement->closingName);
+    }
+
+
 //'<?php $element = <div>Hello <span>World</span></div>;'; 
 
     public function testParseJSXElementWithNestedElements2() {
