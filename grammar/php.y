@@ -409,6 +409,7 @@ non_empty_statement:
 statement:
       non_empty_statement
     | ';'                                                   { makeNop($$); }
+    | jsx_element                                           { $$ = $1; }
 ;
 
 blocklike_statement:
@@ -1011,6 +1012,7 @@ expr:
           }
     | new_expr
     | match
+    | jsx_element                                          { $$ = $1; }
     | T_CLONE expr                                          { $$ = Expr\Clone_[$2]; }
     | variable T_PLUS_EQUAL expr                            { $$ = Expr\AssignOp\Plus      [$1, $3]; }
     | variable T_MINUS_EQUAL expr                           { $$ = Expr\AssignOp\Minus     [$1, $3]; }
@@ -1428,4 +1430,256 @@ encaps_var_offset:
     | plain_variable
 ;
 
+jsx_element:
+      '<' T_STRING jsx_attributes '>' jsx_children '<' '/' T_STRING '>'
+          { $$ = Node\JSX\Element[$2, $3, $5, $8]; }
+    | '<' T_STRING jsx_attributes '/' '>'
+          { $$ = Node\JSX\Element[$2, $3, [], null]; }
+    | '<' T_STRING '>' jsx_children '<' '/' T_STRING '>'
+          { $$ = Node\JSX\Element[$2, [], $4, $7]; }
+    | T_IS_NOT_EQUAL jsx_children '<' '/' '>'
+          { $$ = Node\JSX\Element['', [], $2, '']; }
+    | '<' '/' '>'
+          { $$ = Node\JSX\Element['', [], [], '']; }
+    | T_IS_NOT_EQUAL  jsx_children '<' '/' '>' %prec T_IS_NOT_EQUAL
+          { $$ = Node\JSX\Element['', [], $2, '']; }
+    | '<' '/' '>' %prec T_IS_NOT_EQUAL
+          { $$ = Node\JSX\Element['', [], [], '']; }
+;
+
+jsx_attributes:
+      /* empty */                                           { $$ = []; }
+    | jsx_attributes jsx_attribute                          { push($1, $2); }
+;
+
+jsx_attribute:
+      T_STRING '=' jsx_attribute_value                      { $$ = Node\JSX\Attribute[$1, $3]; }
+    | T_STRING                                              { $$ = Node\JSX\Attribute[$1, new Scalar\String_('true')]; }
+    | '.' '.' '.' expr '}'                                  { $$ = Node\JSX\SpreadAttribute[$4]; }
+;
+
+jsx_attribute_value:
+      T_CONSTANT_ENCAPSED_STRING                           { $$ = Scalar\String_[$1]; }
+    | '{' jsx_expr '}'                                     { $$ = $2; }
+    | T_STRING                                             { $$ = Scalar\String_[$1]; }
+;
+
+jsx_children:
+      /* empty */                                           { $$ = []; }
+    | jsx_children jsx_child                                { push($1, $2); }
+    | jsx_children '{' jsx_expr '}'                        { push($1, Node\JSX\ExpressionContainer[$3]); }
+;
+
+jsx_child:
+      T_CONSTANT_ENCAPSED_STRING                           { $$ = Node\JSX\Text[$1]; }
+    | jsx_element                                          { $$ = $1; }
+    | '{' jsx_expr '}'                                     { $$ = Node\JSX\ExpressionContainer[$2]; }
+    | '{' '/' '*' T_CONSTANT_ENCAPSED_STRING '*' '/' '}'   { $$ = Node\JSX\Comment[$4]; }
+;
+
+jsx_expr:
+      expr                                                  { $$ = $1; }
+    | jsx_element                                          { $$ = $1; }
+    | expr '?' jsx_expr ':' jsx_expr                       { $$ = Expr\Ternary[$1, $3, $5]; }
+    | expr '?' ':' jsx_expr                                { $$ = Expr\Ternary[$1, null, $4]; }
+    | '/' '*' T_CONSTANT_ENCAPSED_STRING '*' '/'           { $$ = Node\JSX\Comment[$3]; }
+;
+
 %%
+
+// Lexer rules for JSX syntax
+'<' {
+    if ($this->state === LEXER_STATE_NORMAL) {
+        // Only enter JSX mode if we're in a JSX context
+        // Check if this is part of a JSX element by looking at the surrounding context
+        $prevToken = $this->getPreviousToken();
+        $nextChar = $this->lookahead();
+        
+        // Only enter JSX mode if:
+        // 1. We're at the start of a statement or after a semicolon
+        // 2. The next character is a valid JSX start
+        if (($prevToken === null || $prevToken === ';' || $prevToken === '{') && 
+            ($nextChar === '>' || $nextChar === '/' || ctype_alpha($nextChar))) {
+            $this->state = LEXER_STATE_JSX;
+            return '<';
+        }
+    }
+    return '<';
+}
+
+'>' {
+    if ($this->state === LEXER_STATE_JSX) {
+        $this->state = LEXER_STATE_NORMAL;
+        return '>';
+    }
+    return '>';
+}
+
+'/' {
+    if ($this->state === LEXER_STATE_JSX) {
+        $nextChar = $this->lookahead();
+        if ($nextChar === '>') {
+            $this->state = LEXER_STATE_NORMAL;
+            return '/>';
+        }
+    }
+    return '/';
+}
+
+'/>' {
+    if ($this->state === LEXER_STATE_JSX) {
+        $this->state = LEXER_STATE_NORMAL;
+        return '/>';
+    }
+    // In normal PHP mode, treat this as two separate tokens
+    $this->yypushback(1);
+    return '/';
+}
+
+'<>' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return '<>';
+    }
+    return '<>';
+}
+
+'{' {
+    if ($this->state === LEXER_STATE_JSX) {
+        $this->state = LEXER_STATE_JSX_EXPRESSION;
+        return '{';
+    }
+    return '{';
+}
+
+'}' {
+    if ($this->state === LEXER_STATE_JSX_EXPRESSION) {
+        $this->state = LEXER_STATE_JSX;
+        return '}';
+    }
+    return '}';
+}
+
+'{/*' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return '{/*';
+    }
+    return '{/*';
+}
+
+'*/}' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return '*/}';
+    }
+    return '*/}';
+}
+
+'...' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return '...';
+    }
+    return '...';
+}
+
+'[^<{]+' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return T_STRING;
+    }
+    return $1;
+}
+
+'[a-zA-Z_][a-zA-Z0-9_]*' {
+    if ($this->state === LEXER_STATE_JSX) {
+        return T_STRING;
+    }
+    return T_STRING;
+}
+
+// Whitespace handling
+'[ \t\n\r]+' {
+    if ($this->state === LEXER_STATE_JSX) {
+        $text = $this->normalizeJSXText($1);
+        if ($this->preserveWhitespace) {
+            return $text;
+        }
+        return $text;
+    }
+    return $1;
+}
+
+// Text normalization
+function normalizeJSXText($text) {
+    // Handle indentation
+    if ($this->preserveWhitespace) {
+        $lines = explode("\n", $text);
+        $indent = str_repeat(" ", $this->indentLevel * 4);
+        $text = implode("\n" . $indent, $lines);
+    } else {
+        // Remove extra whitespace
+        $text = preg_replace('/\s+/', ' ', $text);
+    }
+
+    // Handle HTML entities
+    $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+    // Handle Unicode characters
+    $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
+
+    // Handle special characters in attributes
+    $text = preg_replace('/[\x00-\x1F\x7F]/u', '', $text);
+
+    return $text;
+}
+
+function normalizeJSXAttribute($name) {
+    // Convert camelCase to kebab-case for HTML attributes
+    $name = strtolower(preg_replace('/([a-z])([A-Z])/', '$1-$2', $name));
+
+    // Handle special attributes
+    switch ($name) {
+        case 'class':
+            return 'className';
+        case 'for':
+            return 'htmlFor';
+        default:
+            return $name;
+    }
+}
+
+// Error recovery
+error {
+    if ($this->state === LEXER_STATE_JSX) {
+        $this->state = LEXER_STATE_NORMAL;
+        return $this->handleJSXError('Unexpected character in JSX');
+    }
+}
+
+// State transitions
+function enterJSX() {
+    $this->state = LEXER_STATE_JSX;
+}
+
+function enterJSXExpression() {
+    $this->state = LEXER_STATE_JSX_EXPRESSION;
+    $this->lexerMode = LEXER_MODE_PHP;
+    $this->expressionDepth++;
+    return true;
+}
+
+function exitJSX() {
+    $this->state = LEXER_STATE_NORMAL;
+}
+
+function handleJSXError($message) {
+    $this->error = new Error($message, $this->getAttributes());
+    $this->state = LEXER_STATE_NORMAL;
+    return false;
+}
+
+function handleJSXExpressionError() {
+    if ($this->expressionDepth > 0) {
+        $this->handleJSXError('Unclosed PHP expression in JSX');
+    }
+    $this->expressionDepth = 0;
+    $this->state = LEXER_STATE_NORMAL;
+    return false;
+}
