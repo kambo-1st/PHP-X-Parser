@@ -51,3 +51,8 @@ $element = <div>
 </div>;
 
 $element = <div style={["color" => "red", "fontSize" => "16px"]}>Styled</div>;
+
+$element = <ul>
+            { array_map(fn($item) => <li>{$item}</li>, $items) }
+        </ul>;
+

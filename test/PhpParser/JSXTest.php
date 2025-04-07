@@ -453,4 +453,46 @@ $element11 = <>
         $this->assertEquals('fontSize', $array->items[1]->key->value);
         $this->assertEquals('16px', $array->items[1]->value->value);
     }
+
+/* 
+$element10 = <ul>
+    { array_map(fn($item) => <li>{$item}</li>, $items) }
+</ul>;
+
+
+*/
+
+    public function testParseJSXElementWithArrayMap() {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <ul>
+            { array_map(fn($item) => <li>{$item}</li>, $items) }
+        </ul>;
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+        
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('ul', $jsxElement->name);
+        
+        $this->assertCount(1, $jsxElement->children);
+
+        $this->assertInstanceOf(ExpressionContainer::class, $jsxElement->children[0]);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\FuncCall::class, $jsxElement->children[0]->expression);
+
+        $funcCall = $jsxElement->children[0]->expression;
+
+        $this->assertEquals('array_map', $funcCall->name->name);
+        $this->assertCount(2, $funcCall->args);
+
+        $this->assertInstanceOf(\PhpParser\Node\Expr\ArrowFunction::class, $funcCall->args[0]->value);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $funcCall->args[1]->value);
+    }
+
 }
