@@ -583,4 +583,49 @@ $element10 = <ul>
         $this->assertInstanceOf(Text::class, $jsxElement->children[0]);
         $this->assertEquals('Null test', $jsxElement->children[0]->value);
     }
+
+    // <?php $element = <div>Hello {$name}, you have {$count} messages</div>;
+
+    public function testParseJSXElementWithMultipleExpressions()
+    {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <div>Hello {$name}, you have {$count} messages</div>;
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('div', $jsxElement->name);
+        $this->assertEmpty($jsxElement->jsxAttributes);
+        $this->assertCount(5, $jsxElement->children);
+
+        // Check text node "Hello "
+        $this->assertInstanceOf(Text::class, $jsxElement->children[0]);
+        $this->assertEquals('Hello ', $jsxElement->children[0]->value);
+
+        // Check first expression {$name}
+        $this->assertInstanceOf(ExpressionContainer::class, $jsxElement->children[1]);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $jsxElement->children[1]->expression);
+        $this->assertEquals('name', $jsxElement->children[1]->expression->name);
+
+        // Check text node ", you have "
+        $this->assertInstanceOf(Text::class, $jsxElement->children[2]);
+        $this->assertEquals(', you have ', $jsxElement->children[2]->value);
+
+        // Check second expression {$count}
+        $this->assertInstanceOf(ExpressionContainer::class, $jsxElement->children[3]);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $jsxElement->children[3]->expression);
+        $this->assertEquals('count', $jsxElement->children[3]->expression->name);
+
+        // Check text node " messages"
+        $this->assertInstanceOf(Text::class, $jsxElement->children[4]);
+        $this->assertEquals('messages', $jsxElement->children[4]->value);
+    }
 }

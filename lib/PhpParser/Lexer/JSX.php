@@ -412,6 +412,12 @@ class JSX extends Lexer {
                                 continue;
                             }
                             
+                            // Emit any accumulated content before the expression
+                            if (!empty(trim($content))) {
+                                $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
+                                $content = '';
+                            }
+                            
                             echo "DEBUG: Found JSX expression in content, switching to JSX_EXPR mode\n";
                             $this->mode = self::MODE_JSX_EXPR;
                             $tokens[] = $phpTokens[$i];
@@ -533,11 +539,11 @@ class JSX extends Lexer {
                         }
                         $i++;
                     }
-                }
-                
-                // Add any remaining content, but only if it's not just whitespace and we're not in JSX expression mode
-                if (!empty(trim($content))) {
-                    $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i - 1]->line);
+                    
+                    // Add any remaining content
+                    if (!empty(trim($content))) {
+                        $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i - 1]->line);
+                    }
                 }
                 
                 // Handle closing tag
