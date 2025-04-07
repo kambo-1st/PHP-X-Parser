@@ -1,10 +1,9 @@
-PHP Parser
+PHPX Parser
 ==========
 
 [![Coverage Status](https://coveralls.io/repos/github/nikic/PHP-Parser/badge.svg?branch=master)](https://coveralls.io/github/nikic/PHP-Parser?branch=master)
 
-This is a PHP parser written in PHP. Its purpose is to simplify static code analysis and
-manipulation.
+This is PHPX, a fork of PHP-Parser with added support for JSX syntax. It extends the original PHP parser to support static code analysis and manipulation of both PHP and JSX code.
 
 [**Documentation for version 5.x**][doc_master] (current; for running on PHP >= 7.4; for parsing PHP 7.0 to PHP 8.4, with limited support for parsing PHP 5.x).
 
@@ -15,11 +14,12 @@ Features
 
 The main features provided by this library are:
 
- * Parsing PHP 7, and PHP 8 code into an abstract syntax tree (AST).
+ * Parsing PHP 7, PHP 8, and JSX code into an abstract syntax tree (AST).
    * Invalid code can be parsed into a partial AST.
    * The AST contains accurate location information.
+   * Full support for JSX syntax and components.
  * Dumping the AST in human-readable form.
- * Converting an AST back to PHP code.
+ * Converting an AST back to PHP/JSX code.
    * Formatting can be preserved for partially changed ASTs.
  * Infrastructure to traverse and modify ASTs.
  * Resolution of namespaced names.
@@ -32,9 +32,9 @@ Quick Start
 
 Install the library using [composer](https://getcomposer.org):
 
-    php composer.phar require nikic/php-parser
+    php composer.phar require kambo/php-x-parser
 
-Parse some PHP code into an AST and dump the result in human-readable form:
+Parse some PHP/JSX code into an AST and dump the result in human-readable form:
 
 ```php
 <?php
@@ -47,7 +47,10 @@ $code = <<<'CODE'
 
 function test($foo)
 {
-    var_dump($foo);
+    return <div>
+        <h1>Hello {$foo}</h1>
+        <p>This is JSX in PHP!</p>
+    </div>;
 }
 CODE;
 
@@ -90,19 +93,36 @@ array(
         )
         returnType: null
         stmts: array(
-            0: Stmt_Expression(
-                expr: Expr_FuncCall(
-                    name: Name(
-                        name: var_dump
+            0: Stmt_Return(
+                expr: Expr_JSX(
+                    tag: 'div'
+                    attributes: array(
                     )
-                    args: array(
-                        0: Arg(
-                            name: null
-                            value: Expr_Variable(
-                                name: foo
+                    children: array(
+                        0: Expr_JSX(
+                            tag: 'h1'
+                            attributes: array(
                             )
-                            byRef: false
-                            unpack: false
+                            children: array(
+                                0: Expr_JSX_Text(
+                                    value: 'Hello '
+                                )
+                                1: Expr_JSX_Expression(
+                                    expr: Expr_Variable(
+                                        name: foo
+                                    )
+                                )
+                            )
+                        )
+                        1: Expr_JSX(
+                            tag: 'p'
+                            attributes: array(
+                            )
+                            children: array(
+                                0: Expr_JSX_Text(
+                                    value: 'This is JSX in PHP!'
+                                )
+                            )
                         )
                     )
                 )
@@ -174,7 +194,7 @@ $prettyPrinter = new PrettyPrinter\Standard;
 echo $prettyPrinter->prettyPrintFile($ast);
 ```
 
-This gives us our original code, minus the `var_dump()` call inside the function:
+This gives us our original code, minus the JSX content inside the function:
 
 ```php
 <?php
@@ -205,7 +225,7 @@ Component documentation:
    * Name resolver options
    * Name resolution context
  * [Pretty printing](doc/component/Pretty_printing.markdown)
-   * Converting AST back to PHP code
+   * Converting AST back to PHP/JSX code
    * Customizing formatting
    * Formatting-preserving code transformations
  * [AST builders](doc/component/AST_builders.markdown)
@@ -227,7 +247,11 @@ Component documentation:
    * Garbage collection impact
  * [Frequently asked questions](doc/component/FAQ.markdown)
    * Parent and sibling references
+ * [JSX Support](doc/component/JSX_Support.markdown)
+   * JSX syntax and components
+   * JSX expressions and attributes
+   * JSX transformation
 
- [doc_3_x]: https://github.com/nikic/PHP-Parser/tree/3.x/doc
- [doc_4_x]: https://github.com/nikic/PHP-Parser/tree/4.x/doc
- [doc_master]: https://github.com/nikic/PHP-Parser/tree/master/doc
+ [doc_3_x]: https://github.com/kambo/PHP-X-Parser/tree/3.x/doc
+ [doc_4_x]: https://github.com/kambo/PHP-X-Parser/tree/4.x/doc
+ [doc_master]: https://github.com/kambo/PHP-X-Parser/tree/master/doc

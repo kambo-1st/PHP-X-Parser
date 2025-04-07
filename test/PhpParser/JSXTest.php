@@ -205,6 +205,39 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         $this->assertEquals('div', $jsxElement->closingName);
     }
 
+//'<?php $element = <div>Hello <span>World</span></div>;'; 
+
+    public function testParseJSXElementWithNestedElements2() {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <div>Hello <span>World</span></div>;
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('div', $jsxElement->name);
+        $this->assertCount(2, $jsxElement->children);
+
+        $this->assertInstanceOf(Text::class, $jsxElement->children[0]);
+        $this->assertEquals('Hello ', $jsxElement->children[0]->value);
+
+        $this->assertInstanceOf(Element::class, $jsxElement->children[1]);
+        $this->assertEquals('span', $jsxElement->children[1]->name);
+        $this->assertCount(1, $jsxElement->children[1]->children);
+
+        $this->assertInstanceOf(Text::class, $jsxElement->children[1]->children[0]);
+        $this->assertEquals('World', $jsxElement->children[1]->children[0]->value);
+
+        $this->assertEquals('div', $jsxElement->closingName);
+    }
+
     // class with property conating JSX, generate test
     public function testParseClassWithJSXProperty() {
         $stmts = $this->parseAndTransform('<?php
@@ -512,5 +545,42 @@ $element10 = <ul>
         $jsxElement = $expr->expr;
         $this->assertInstanceOf(Element::class, $jsxElement);
         $this->assertEquals('Some.Component', $jsxElement->name);
+    }
+
+    public function testParseJSXElementWithHyphenatedAttributes()
+    {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <div data-null={null} data-undefined={$undefined}>Null test</div>;
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('div', $jsxElement->name);
+        $this->assertCount(2, $jsxElement->jsxAttributes);
+
+        // Check first attribute (data-null)
+        $this->assertInstanceOf(Attribute::class, $jsxElement->jsxAttributes[0]);
+        $this->assertEquals('data-null', $jsxElement->jsxAttributes[0]->name);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\ConstFetch::class, $jsxElement->jsxAttributes[0]->value);
+        $this->assertEquals('null', $jsxElement->jsxAttributes[0]->value->name->toString());
+
+        // Check second attribute (data-undefined)
+        $this->assertInstanceOf(Attribute::class, $jsxElement->jsxAttributes[1]);
+        $this->assertEquals('data-undefined', $jsxElement->jsxAttributes[1]->name);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $jsxElement->jsxAttributes[1]->value);
+        $this->assertEquals('undefined', $jsxElement->jsxAttributes[1]->value->name);
+
+        // Check children
+        $this->assertCount(1, $jsxElement->children);
+        $this->assertInstanceOf(Text::class, $jsxElement->children[0]);
+        $this->assertEquals('Null test', $jsxElement->children[0]->value);
     }
 }

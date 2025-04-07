@@ -178,8 +178,19 @@ class JSX extends Lexer {
                     if ($phpTokens[$i]->id === self::T_STRING || $phpTokens[$i]->id === T_CLASS) {
                         echo "DEBUG: Processing attribute name: " . $phpTokens[$i]->text . "\n";
                         // Start of attribute
-                        $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                        $attributeName = $phpTokens[$i]->text;
                         $i++;
+                        
+                        // Check for hyphenated attribute names
+                        while ($i < $len && $phpTokens[$i]->id === 45) { // 45 is '-'
+                            $i++;
+                            if ($i < $len && $phpTokens[$i]->id === self::T_STRING) {
+                                $attributeName .= '-' . $phpTokens[$i]->text;
+                                $i++;
+                            }
+                        }
+                        
+                        $tokens[] = new Token(self::T_STRING, $attributeName, $phpTokens[$i]->line);
                         
                         // Skip whitespace after attribute name
                         if ($i < $len && $phpTokens[$i]->id === T_WHITESPACE) {
