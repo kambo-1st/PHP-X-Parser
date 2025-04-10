@@ -368,7 +368,16 @@ class JSX extends Lexer {
             if ($token->id === self::T_CURLY_CLOSE && $exprDepth === 0) {
                 break;
             }
-            
+
+            if($token->id === T_COMMENT){
+                $resultTokens[] = new Token(self::T_SLASH, '/', $token->line);  
+                $resultTokens[] = new Token(ord('*'), '*', $token->line);
+                $commentContent = substr($token->text, 2, -2); // Remove /* and */
+                $resultTokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $commentContent, $token->line);
+                $resultTokens[] = new Token(ord('*'), '*', $token->line);
+                $resultTokens[] = new Token(self::T_SLASH, '/', $token->line);
+            }
+
             // Track expression depth for nested expressions
             if ($token->id === self::T_CURLY_OPEN) {
                 $exprDepth++;

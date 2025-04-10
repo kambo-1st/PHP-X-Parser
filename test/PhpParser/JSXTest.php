@@ -696,30 +696,37 @@ $element10 = <ul>
 
         $this->assertCount(1, $stmts);
 
+
         $stmt = $stmts[0];
-        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Function_::class, $stmt);
 
-        $expr = $stmt->expr;
-        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+        $this->assertEquals('FruitList', $stmt->name->name);
 
-        $jsxElement = $expr->expr;
-        $this->assertInstanceOf(Element::class, $jsxElement);
-        $this->assertEquals('FruitList', $jsxElement->name);
+        $this->assertCount(1, $stmt->params);
 
-        $this->assertCount(1, $jsxElement->children);
+        $this->assertInstanceOf(\PhpParser\Node\Param::class, $stmt->params[0]);
+        $this->assertEquals('items', $stmt->params[0]->var->name);
 
-        $this->assertInstanceOf(ExpressionContainer::class, $jsxElement->children[0]);
-        $this->assertInstanceOf(\PhpParser\Node\Expr\FuncCall::class, $jsxElement->children[0]->expression);
+        // 1) PhpParser\JSXTest::testParseJSXElementWithFunction
+        // Undefined property: PhpParser\Node\Stmt\Function_::$expr
 
-        $funcCall = $jsxElement->children[0]->expression;
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Return_::class, $stmt->stmts[0]);
+
+        $return = $stmt->stmts[0];
+        $this->assertInstanceOf(Element::class, $return->expr);
+        $this->assertEquals('ul', $return->expr->name);
+
+        $this->assertCount(1, $return->expr->children);
+
+        $this->assertInstanceOf(ExpressionContainer::class, $return->expr->children[0]);
+
+        $funcCall = $return->expr->children[0]->expression;
 
         $this->assertEquals('array_map', $funcCall->name->name);
         $this->assertCount(3, $funcCall->args);
 
         $this->assertInstanceOf(\PhpParser\Node\Expr\ArrowFunction::class, $funcCall->args[0]->value);
-        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $funcCall->args[1]->value);
-        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $funcCall->args[2]->value);
-        
+
         $arrowFunction = $funcCall->args[0]->value;
         $this->assertCount(2, $arrowFunction->params);
 
@@ -733,11 +740,17 @@ $element10 = <ul>
         $this->assertEquals('li', $arrowFunction->expr->name);
 
         $this->assertCount(1, $arrowFunction->expr->children);
+        $this->assertInstanceOf(\PhpParser\Node\JSX\ExpressionContainer::class, $arrowFunction->expr->children[0]);
 
-        $this->assertInstanceOf(Text::class, $arrowFunction->expr->children[0]);
-        $this->assertEquals('{$fruit}', $arrowFunction->expr->children[0]->value);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $arrowFunction->expr->children[0]->expression);
+        $this->assertEquals('fruit', $arrowFunction->expr->children[0]->expression->name);
 
-        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $funcCall->args[2]->value);
-        $this->assertEquals('index', $funcCall->args[2]->value->name);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\FuncCall::class, $funcCall->args[2]->value);
+        $this->assertEquals('array_keys', $funcCall->args[2]->value->name->name);
+
+        $this->assertCount(1, $funcCall->args[2]->value->args);
+
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $funcCall->args[2]->value->args[0]->value);
+        $this->assertEquals('items', $funcCall->args[2]->value->args[0]->value->name);
     }
 }
