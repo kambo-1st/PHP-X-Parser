@@ -58,3 +58,15 @@ $element = <ul>
 
 
 $element = <Some.Component />;
+
+function FruitList(array $items) {
+    return (
+        <ul>
+            { array_map(
+                fn($fruit, $index) => <li key={$index}>{$fruit}</li>,
+                $items,
+                array_keys($items)
+            ) }
+        </ul>
+    );
+}

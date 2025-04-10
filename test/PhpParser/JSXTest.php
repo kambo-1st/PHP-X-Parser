@@ -665,4 +665,79 @@ $element10 = <ul>
         $this->assertInstanceOf(Text::class, $jsxElement->children[4]);
         $this->assertEquals('messages', $jsxElement->children[4]->value);
     }
+/*
+    function FruitList(array $items) {
+        return (
+            <ul>
+                { array_map(
+                    fn($fruit, $index) => <li key={$index}>{$fruit}</li>,
+                    $items,
+                    array_keys($items)
+                ) }
+            </ul>
+        );
+    }
+*/
+
+    public function testParseJSXElementWithFunction() {
+        $stmts = $this->parseAndTransform('<?php
+        function FruitList(array $items) {
+            return (
+                <ul>
+                    { array_map(
+                        fn($fruit, $index) => <li key={$index}>{$fruit}</li>,
+                        $items,
+                        array_keys($items)
+                    ) }
+                </ul>
+            );
+        }
+        ');
+
+        $this->assertCount(1, $stmts);
+
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('FruitList', $jsxElement->name);
+
+        $this->assertCount(1, $jsxElement->children);
+
+        $this->assertInstanceOf(ExpressionContainer::class, $jsxElement->children[0]);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\FuncCall::class, $jsxElement->children[0]->expression);
+
+        $funcCall = $jsxElement->children[0]->expression;
+
+        $this->assertEquals('array_map', $funcCall->name->name);
+        $this->assertCount(3, $funcCall->args);
+
+        $this->assertInstanceOf(\PhpParser\Node\Expr\ArrowFunction::class, $funcCall->args[0]->value);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $funcCall->args[1]->value);
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $funcCall->args[2]->value);
+        
+        $arrowFunction = $funcCall->args[0]->value;
+        $this->assertCount(2, $arrowFunction->params);
+
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $arrowFunction->params[0]->var);
+        $this->assertEquals('fruit', $arrowFunction->params[0]->var->name);
+
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $arrowFunction->params[1]->var);
+        $this->assertEquals('index', $arrowFunction->params[1]->var->name);
+
+        $this->assertInstanceOf(Element::class, $arrowFunction->expr);
+        $this->assertEquals('li', $arrowFunction->expr->name);
+
+        $this->assertCount(1, $arrowFunction->expr->children);
+
+        $this->assertInstanceOf(Text::class, $arrowFunction->expr->children[0]);
+        $this->assertEquals('{$fruit}', $arrowFunction->expr->children[0]->value);
+
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Variable::class, $funcCall->args[2]->value);
+        $this->assertEquals('index', $funcCall->args[2]->value->name);
+    }
 }

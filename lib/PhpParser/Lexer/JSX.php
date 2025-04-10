@@ -249,10 +249,40 @@ class JSX extends Lexer {
                                         $tokens[] = new Token(self::T_STRING, $tagToken->text, $tagToken->line);
                                         $i++;
                                         
-                                        // Handle closing bracket
-                                        if ($i < $len && $phpTokens[$i]->id === self::T_GT) {
-                                            echo "DEBUG: Processing closing bracket\n";
-                                            $tokens[] = $phpTokens[$i];
+                                        // Handle attributes if any
+                                        while ($i < $len && $phpTokens[$i]->id !== self::T_GT) {
+                                            if ($phpTokens[$i]->id === T_WHITESPACE) {
+                                                $i++;
+                                                continue;
+                                            }
+                                            
+                                            if ($phpTokens[$i]->id === self::T_STRING) {
+                                                $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                $i++;
+                                                
+                                                if ($i < $len && $phpTokens[$i]->id === self::T_EQUAL) {
+                                                    $tokens[] = new Token(self::T_EQUAL, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                    $i++;
+                                                    
+                                                    if ($i < $len) {
+                                                        if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
+                                                            $tokens[] = $phpTokens[$i];
+                                                            $i++;
+                                                            continue;
+                                                        }
+                                                        $value = $phpTokens[$i]->text;
+                                                        if (strlen($value) >= 2 && ($value[0] === '"' || $value[0] === "'")) {
+                                                            $value = substr($value, 1, -1);
+                                                        }
+                                                        $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $value, $phpTokens[$i]->line);
+                                                    }
+                                                }
+                                            }
+                                            $i++;
+                                        }
+                                        
+                                        if ($i < $len) {
+                                            $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
                                             $i++;
                                         }
                                         
@@ -265,6 +295,15 @@ class JSX extends Lexer {
                                                     $content .= ' ';
                                                     $lastWasSpace = true;
                                                 }
+                                            } else if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
+                                                // Handle expression in content
+                                                if (!empty(trim($content))) {
+                                                    $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
+                                                    $content = '';
+                                                }
+                                                $tokens[] = $phpTokens[$i];
+                                                $i++;
+                                                continue;
                                             } else {
                                                 $content .= $phpTokens[$i]->text;
                                                 $lastWasSpace = false;
@@ -306,6 +345,113 @@ class JSX extends Lexer {
                                             continue;
                                         }
                                         
+                                        // Check for JSX element in expression
+                                        if ($phpTokens[$i]->id === self::T_LT && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_STRING) {
+                                            echo "DEBUG: Found JSX element in expression\n";
+                                            // Create a new token for the opening bracket
+                                            $tokens[] = new Token(self::T_LT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                            $i++;
+                                            
+                                            // Get tag name
+                                            $tagToken = $phpTokens[$i];
+                                            echo "DEBUG: JSX tag name: " . $tagToken->text . "\n";
+                                            $tokens[] = new Token(self::T_STRING, $tagToken->text, $tagToken->line);
+                                            $i++;
+                                            
+                                            // Handle attributes if any
+                                            while ($i < $len && $phpTokens[$i]->id !== self::T_GT) {
+                                                if ($phpTokens[$i]->id === T_WHITESPACE) {
+                                                    $i++;
+                                                    continue;
+                                                }
+                                                
+                                                if ($phpTokens[$i]->id === self::T_STRING) {
+                                                    $attrName = $phpTokens[$i]->text;
+                                                    $tokens[] = new Token(self::T_STRING, $attrName, $phpTokens[$i]->line);
+                                                    $i++;
+                                                    
+                                                    if ($i < $len && $phpTokens[$i]->id === self::T_EQUAL) {
+                                                        $tokens[] = new Token(self::T_EQUAL, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                        $i++;
+                                                        
+                                                        if ($i < $len) {
+                                                            if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
+                                                                $tokens[] = new Token(self::T_CURLY_OPEN, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                                $i++;
+                                                                continue;
+                                                            }
+                                                            $value = $phpTokens[$i]->text;
+                                                            if (strlen($value) >= 2 && ($value[0] === '"' || $value[0] === "'")) {
+                                                                $value = substr($value, 1, -1);
+                                                            }
+                                                            $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $value, $phpTokens[$i]->line);
+                                                        }
+                                                    }
+                                                }
+                                                $i++;
+                                            }
+                                            
+                                            // Handle closing bracket
+                                            if ($i < $len) {
+                                                $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                $i++;
+                                            }
+                                            
+                                            // Get content until closing tag
+                                            $content = '';
+                                            $lastWasSpace = false;
+                                            while ($i < $len && !($phpTokens[$i]->id === self::T_LT && $i + 1 < $len && $phpTokens[$i + 1]->id === self::T_SLASH)) {
+                                                if ($phpTokens[$i]->id === T_WHITESPACE) {
+                                                    if (!$lastWasSpace) {
+                                                        $content .= ' ';
+                                                        $lastWasSpace = true;
+                                                    }
+                                                } else if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
+                                                    // Handle nested expression
+                                                    if (!empty(trim($content))) {
+                                                        $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
+                                                        $content = '';
+                                                    }
+                                                    $tokens[] = new Token(self::T_CURLY_OPEN, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                    $i++;
+                                                    continue;
+                                                } else {
+                                                    $content .= $phpTokens[$i]->text;
+                                                    $lastWasSpace = false;
+                                                }
+                                                $i++;
+                                            }
+                                            
+                                            if (!empty(trim($content))) {
+                                                $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $content, $phpTokens[$i]->line);
+                                            }
+                                            
+                                            // Handle closing tag
+                                            if ($i < $len && $phpTokens[$i]->id === self::T_LT) {
+                                                echo "DEBUG: Processing closing tag\n";
+                                                $tokens[] = new Token(self::T_LT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                $i++;
+                                                
+                                                if ($i < $len && $phpTokens[$i]->id === self::T_SLASH) {
+                                                    $tokens[] = new Token(self::T_SLASH, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                    $i++;
+                                                    
+                                                    if ($i < $len && $phpTokens[$i]->id === self::T_STRING) {
+                                                        $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                        $i++;
+                                                        
+                                                        if ($i < $len && $phpTokens[$i]->id === self::T_GT) {
+                                                            $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                            $i++;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Don't switch modes, stay in JSX_EXPR mode
+                                            continue;
+                                        }
+                                        
                                         $tokens[] = $phpTokens[$i];
                                         $i++;
                                     }
@@ -325,6 +471,13 @@ class JSX extends Lexer {
                                 }
                                 echo "DEBUG: Processing attribute value: " . $value . "\n";
                                 $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $value, $phpTokens[$i]->line);
+                                
+                                // Check for curly brace expression in attribute
+                                if ($i + 1 < $len && $phpTokens[$i + 1]->id === self::T_CURLY_OPEN) {
+                                    echo "DEBUG: Found curly brace expression in attribute\n";
+                                    $this->mode = self::MODE_JSX_EXPR;
+                                    $i++;
+                                }
                             }
                         }
                     }
@@ -457,10 +610,40 @@ class JSX extends Lexer {
                                     $tokens[] = new Token(self::T_STRING, $tagToken->text, $tagToken->line);
                                     $i++;
                                     
-                                    // Handle closing bracket
-                                    if ($i < $len && $phpTokens[$i]->id === self::T_GT) {
-                                        echo "DEBUG: Processing closing bracket\n";
-                                        $tokens[] = $phpTokens[$i];
+                                    // Handle attributes if any
+                                    while ($i < $len && $phpTokens[$i]->id !== self::T_GT) {
+                                        if ($phpTokens[$i]->id === T_WHITESPACE) {
+                                            $i++;
+                                            continue;
+                                        }
+                                        
+                                        if ($phpTokens[$i]->id === self::T_STRING) {
+                                            $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                            $i++;
+                                            
+                                            if ($i < $len && $phpTokens[$i]->id === self::T_EQUAL) {
+                                                $tokens[] = new Token(self::T_EQUAL, $phpTokens[$i]->text, $phpTokens[$i]->line);
+                                                $i++;
+                                                
+                                                if ($i < $len) {
+                                                    if ($phpTokens[$i]->id === self::T_CURLY_OPEN) {
+                                                        $tokens[] = $phpTokens[$i];
+                                                        $i++;
+                                                        continue;
+                                                    }
+                                                    $value = $phpTokens[$i]->text;
+                                                    if (strlen($value) >= 2 && ($value[0] === '"' || $value[0] === "'")) {
+                                                        $value = substr($value, 1, -1);
+                                                    }
+                                                    $tokens[] = new Token(self::T_CONSTANT_ENCAPSED_STRING, $value, $phpTokens[$i]->line);
+                                                }
+                                            }
+                                        }
+                                        $i++;
+                                    }
+                                    
+                                    if ($i < $len) {
+                                        $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
                                         $i++;
                                     }
                                     
@@ -495,11 +678,11 @@ class JSX extends Lexer {
                                             $i++;
                                             
                                             if ($i < $len && $phpTokens[$i]->id === self::T_STRING) {
-                                                $tokens[] = $phpTokens[$i];
+                                                $tokens[] = new Token(self::T_STRING, $phpTokens[$i]->text, $phpTokens[$i]->line);
                                                 $i++;
                                                 
                                                 if ($i < $len && $phpTokens[$i]->id === self::T_GT) {
-                                                    $tokens[] = $phpTokens[$i];
+                                                    $tokens[] = new Token(self::T_GT, $phpTokens[$i]->text, $phpTokens[$i]->line);
                                                     $i++;
                                                 }
                                             }
@@ -585,6 +768,10 @@ class JSX extends Lexer {
         
         // Add EOF token with correct line number
         $tokens[] = new Token(self::T_EOF, '', $this->line + 1);
+
+echo "DEBUG: Tokens after processing\n";
+var_dump($tokens);
+
         return $tokens;
     }
     
@@ -601,8 +788,24 @@ class JSX extends Lexer {
         }
         
         // Check for regular JSX element
-        return $tokens[$next]->id === self::T_STRING &&
-               ctype_alpha($tokens[$next]->text[0]);
+        if ($tokens[$next]->id === self::T_STRING &&
+            ctype_alpha($tokens[$next]->text[0])) {
+            return true;
+        }
+        
+        // Check if we're in a return statement or arrow function
+        $prev = $i - 1;
+        while ($prev >= 0) {
+            if ($tokens[$prev]->id === T_RETURN || $tokens[$prev]->id === T_DOUBLE_ARROW) {
+                return true;
+            }
+            if ($tokens[$prev]->id !== T_WHITESPACE) {
+                break;
+            }
+            $prev--;
+        }
+        
+        return false;
     }
 
     private function isJSXComment(array $tokens, int $i): bool
