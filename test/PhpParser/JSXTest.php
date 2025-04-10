@@ -96,7 +96,7 @@ class JSXTest extends \PHPUnit\Framework\TestCase
 
     public function testParseJSXElementWithSpreadAttributes() {
         $stmts = $this->parseAndTransform('<?php
-        $element = <div {...$props}>Hello World</div>;
+        $element = <div {...$props} >Hello World</div>;
         ');
         
         $this->assertCount(1, $stmts);
@@ -670,7 +670,7 @@ $element10 = <ul>
         return (
             <ul>
                 { array_map(
-                    fn($fruit, $index) => <li key={$index}>{$fruit}</li>,
+                    fn($fruit, $index) => <li key={$index} />{$fruit}</li>,
                     $items,
                     array_keys($items)
                 ) }
@@ -685,7 +685,7 @@ $element10 = <ul>
             return (
                 <ul>
                     { array_map(
-                        fn($fruit, $index) => <li key={$index}>{$fruit}</li>,
+                        fn($fruit, $index) => <li key={$index} >{$fruit}</li>,
                         $items,
                         array_keys($items)
                     ) }
