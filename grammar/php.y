@@ -1432,7 +1432,7 @@ encaps_var_offset:
 
 jsx_element:
       '<' T_STRING jsx_attributes '>' jsx_children '<' '/' T_STRING '>'
-          { $$ = Node\JSX\Element[$2, $3, $5, $8]; }
+          { $$ = Node\JSX\Element[$2, $3, $5, $8]; }  
     | '<' T_STRING jsx_attributes '/' '>'
           { $$ = Node\JSX\Element[$2, $3, [], null]; }
     | '<' T_STRING '>' jsx_children '<' '/' T_STRING '>'

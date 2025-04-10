@@ -175,6 +175,48 @@ class JSXTest extends \PHPUnit\Framework\TestCase
         $this->assertNull($jsxElement->closingName);
     }
 
+    public function testParseSelfClosingJSXElementComponent() {
+        $stmts = $this->parseAndTransform('<?php
+        $element = <MyComponent />;
+        ');
+        
+        $this->assertCount(1, $stmts);
+        
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $stmt);
+        
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(\PhpParser\Node\Expr\Assign::class, $expr);
+        
+        $jsxElement = $expr->expr;
+        $this->assertInstanceOf(Element::class, $jsxElement);
+        $this->assertEquals('MyComponent', $jsxElement->name);
+        $this->assertCount(0, $jsxElement->jsxAttributes);
+        
+        $this->assertEmpty($jsxElement->children);
+        $this->assertNull($jsxElement->closingName);
+    }
+
+    public function testParseSelfClosingJSXElementComponentReturn() {
+        $stmts = $this->parseAndTransform('<?php
+        return (<MyComponent />);
+        ');
+        
+        $this->assertCount(1, $stmts);
+        
+        $stmt = $stmts[0];
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Return_::class, $stmt);
+        
+        $expr = $stmt->expr;
+        $this->assertInstanceOf(Element::class, $expr);
+
+        $this->assertEquals('MyComponent', $expr->name);
+        $this->assertCount(0, $expr->jsxAttributes);
+        
+        $this->assertEmpty($expr->children);
+        $this->assertNull($expr->closingName);
+    }
+
     public function testParseJSXElementWithNestedElements() {
         $stmts = $this->parseAndTransform('<?php
         $element = <div><span>World</span></div>;

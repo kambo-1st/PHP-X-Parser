@@ -495,6 +495,14 @@ class JSX extends Lexer {
                 continue;
             }
             
+            // Check if next token is a closing parenthesis
+            if ($i < $len && $tokens[$i]->id === 41) { // 41 is ')'
+                $this->mode = self::MODE_PHP;
+                $resultTokens[] = new Token(41, $tokens[$i]->text, $tokens[$i]->line);
+                $i++;
+                break;//continue;
+            }
+
             // Regular content
             $content .= $token->text;
             $lastWasSpace = false;
