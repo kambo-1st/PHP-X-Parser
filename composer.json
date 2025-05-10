@@ -1,7 +1,7 @@
 {
-    "name": "nikic/php-parser",
+    "name": "syntaxx/phpx-parser",
     "type": "library",
-    "description": "A PHP parser written in PHP",
+    "description": "A PHPX parser written in PHP",
     "keywords": [
         "php",
         "parser"
@@ -39,5 +39,6 @@
     },
     "bin": [
         "bin/php-parse"
-    ]
+    ],
+    "version": "4.19.4"
 }
